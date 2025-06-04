@@ -1,0 +1,9 @@
+database:
+  host: db2204.laser2mail.com
+  port: 5432
+  user: londen
+  password: FuseMind2024
+  name: londen-local
+
+app:
+  secret_key: your_secret_key_here
