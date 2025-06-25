@@ -4,7 +4,8 @@ from flask import Flask
 from flask_cors import CORS
 from extensions import db, api
 from routes.auth import auth_ns
-
+from routes.campain_manager.source import campaign_ns
+from routes.reports.source import reports_ns
 
 # from routes.dashboard import dashboard_ns
 # from routes.reports import reports_ns
@@ -32,7 +33,8 @@ api.init_app(app)
 # Register Namespaces
 api.add_namespace(auth_ns, path='/api/auth')
 # api.add_namespace(dashboard_ns, path='/api/dashboard')
-# api.add_namespace(reports_ns, path='/api/reports')
+api.add_namespace(reports_ns, path='/api/reports')
+api.add_namespace(campaign_ns, path='/api/campaign')
 
 # Run
 if __name__ == '__main__':
