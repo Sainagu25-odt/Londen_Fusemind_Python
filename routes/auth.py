@@ -41,9 +41,9 @@ class Login(Resource):
 
 @auth_ns.route('/logout')
 class Logout(Resource):
-    @token_required(current_app)
-    def post(self, current_user):
-        return {"message": "Logout successful. Please discard the token on client side."}, 200
+    # @token_required(current_app)
+    def post(self):
+        return {"message": "Logout successful."}, 200
 
 
 @auth_ns.route('/status')
