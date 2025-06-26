@@ -4,7 +4,7 @@ from sqlalchemy.exc import SQLAlchemyError
 
 from extensions import db
 from sql.campaigns_sql import counts_sql_template, states_sql_template, soft_delete_sql, undelete_sql, \
-    GET_ACTIVE_CAMPAIGNS_SQL, GET_DELETED_CAMPAIGNS_SQL, GET_CAMPAIGN_BY_ID, GET_CHANNELS, GET_CRITERIA
+    GET_ACTIVE_CAMPAIGNS_SQL, GET_DELETED_CAMPAIGNS_SQL, GET_CRITERIA, GET_CAMPAIGN, ADD_CRITERION
 
 
 def get_campaigns(include_deleted):
@@ -108,47 +108,48 @@ def undelete_campaign(campaign_id):
         abort(500, description=f"Database error: {str(e)}")
 
 
+def get_campaign_edit_data(campaign_id, show_counts):
+    result = db.session.execute(text(GET_CAMPAIGN), {"id": campaign_id}).mappings().first()
 
-def get_campaign_edit_data(campaign_id, show_counts=False):
-    # Check if campaign exists
-    result = db.session.execute(text(GET_CAMPAIGN_BY_ID), {"id": campaign_id}).fetchone()
     if not result:
-        abort(404, f"Campaign with ID {campaign_id} not found")
+        return {"message": "Campaign not found"}, 404
 
-    # Get distinct channels
-    channels_result = db.session.execute(text(GET_CHANNELS)).fetchall()
-    channels = [row[0] for row in channels_result]
+    criteria_rows = db.session.execute(text(GET_CRITERIA), {"id": campaign_id}).mappings().all()
+    criteria = [{
+        "column_name": row["column_name"],
+        "operator": row["operator"],
+        "value": row["value"],
+        "is_or": row["is_or"]
+    } for row in criteria_rows]
 
-    # Get criteria
-    criteria_result = db.session.execute(text(GET_CRITERIA), {"id": campaign_id}).fetchall()
-    criteria = [
-        {
-            "column_name": row[0],
-            "operator": row[1],
-            "value": row[2],
-            "is_or": row[3]
-        }
-        for row in criteria_result
-    ]
-
-    steps = []
-    if show_counts:
-        for i in range(1, len(criteria) + 1):
-            where_clauses = []
-            params = {}
-            for idx, crit in enumerate(criteria[:i]):
-                key = f"param_{idx}"
-                where_clauses.append(f"p.{crit['column_name']} {crit['operator']} :{key}")
-                params[key] = crit['value']
-            where_sql = " AND ".join(where_clauses)
-            sql = f"SELECT COUNT(*) FROM campaigns AS p WHERE {where_sql}" if where_sql else "SELECT COUNT(*) FROM campaigns"
-            count = db.session.execute(text(sql), params).scalar()
-            steps.append(count)
-
-    return {
-        "campaign_id": campaign_id,
-        "channels": channels,
-        "criteria": criteria,
-        "steps": steps,
-        "currentStep": 0 if show_counts else None
+    response = {
+        "id": result["id"],
+        "name": result["name"],
+        "description": result["description"],
+        "channel": result["channel"],
+        "deleted": result["deleted"],
+        "datasource_table": result["tablename"],
+        "criteria": criteria
     }
+
+    if show_counts == 1 and result["tablename"]:
+        count_query = f"SELECT COUNT(*) FROM {result['tablename']} p"
+        count = db.session.execute(text(count_query)).scalar()
+        response["counts"] = count
+
+    return response
+
+def add_criterion(campaign_id, data):
+    try:
+        db.session.execute(text(ADD_CRITERION), {
+            "campaign_id": campaign_id,
+            "column_name": data["column_name"],
+            "sql_type": data["sql_type"],
+            "sql_value": data["sql_value"],
+            "or_next": data.get("or_next", False)
+        })
+        db.session.commit()
+        return {"message": "Criterion added successfully"}
+    except SQLAlchemyError as e:
+        db.session.rollback()
+        raise e

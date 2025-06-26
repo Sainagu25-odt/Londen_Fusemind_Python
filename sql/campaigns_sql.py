@@ -178,23 +178,29 @@ undelete_sql = """
 """
 
 
-GET_CAMPAIGN_BY_ID = """
-    SELECT id FROM campaigns 
-    WHERE id = :id AND deleted_at IS NULL
-"""
-
-GET_CHANNELS = """
-    SELECT DISTINCT channel 
-    FROM campaigns 
-    WHERE deleted_at IS NULL AND channel IS NOT NULL
+GET_CAMPAIGN = """
+SELECT 
+    c.id,
+    c.name,
+    c.description,
+    c.channel,
+    c.deleted_at IS NOT NULL AS deleted,
+    d.tablename
+FROM campaigns c
+LEFT JOIN campaign_datasources d ON c.datasource = d.datasource
+WHERE c.id = :id
 """
 
 GET_CRITERIA = """
-    SELECT column_name, sql_type AS operator, sql_value AS value, or_next AS is_or 
-    FROM campaign_criteria 
-    WHERE campaign_id = :id 
-    ORDER BY id
+SELECT column_name, sql_type AS operator, sql_value AS value, or_next AS is_or
+FROM campaign_criteria
+WHERE campaign_id = :id
+ORDER BY id
 """
 
-
-
+ADD_CRITERION = """
+    INSERT INTO campaign_criteria 
+        (campaign_id, column_name, sql_type, sql_value, or_next)
+    VALUES 
+        (:campaign_id, :column_name, :sql_type, :sql_value, :or_next)
+"""

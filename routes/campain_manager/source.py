@@ -1,11 +1,13 @@
+import logging
 from logging import exception
 
 from flask_restx import Namespace, Resource, fields, reqparse
 
 from flask import request, jsonify, current_app
+from sqlalchemy.exc import SQLAlchemyError
 
 from models.campaigns import get_campaign_details, soft_delete_campaign, get_campaigns, undelete_campaign, \
-    get_campaign_edit_data
+    get_campaign_edit_data, add_criterion
 from extensions import db
 from sqlalchemy import text
 
@@ -164,14 +166,67 @@ class DeleteCampaign(Resource):
             return {'error': str(e)}, 500
 
 
-@campaign_ns.route('/<int:campaign_id>/edit')
-class CampaignEdit(Resource):
-    @campaign_ns.doc(params={'show_counts': 'Set to true to include step counts'})
-    @campaign_ns.marshal_with(campaign_edit_response)
-    def get(self, campaign_id):
-        show_counts = request.args.get('show_counts', 'false').lower() == 'true'
-        return get_campaign_edit_data(campaign_id, show_counts)
 
+edit_parser = reqparse.RequestParser()
+edit_parser.add_argument('show_counts', type=int, default=0)
+
+criteria_field = campaign_ns.model('Criterion', {
+    'column_name': fields.String,
+    'operator': fields.String,
+    'value': fields.String,
+    'is_or': fields.Boolean
+})
+
+edit_response = campaign_ns.model('EditCampaignResponse', {
+    'id': fields.Integer,
+    'name': fields.String,
+    'description': fields.String,
+    'channel': fields.String,
+    'deleted': fields.Boolean,
+    'datasource_table': fields.String,
+    'criteria': fields.List(fields.Nested(criteria_field)),
+    'counts': fields.Integer(required=False)
+})
+
+@campaign_ns.route('/<int:campaign_id>/edit')
+@campaign_ns.doc(params={'show_counts': 'Set to 1 to include counts'})
+class EditCampaign(Resource):
+    @campaign_ns.expect(edit_parser)
+    @campaign_ns.marshal_with(edit_response)
+    def get(self, campaign_id):
+        args = edit_parser.parse_args()
+        return get_campaign_edit_data(campaign_id, args['show_counts'])
+
+add_crit_model = campaign_ns.model('NewCriterion', {
+    "column_name": fields.String(required=True),
+    "sql_type": fields.String(required=True),
+    "sql_value": fields.String(required=True),
+    "or_next": fields.Boolean(required=False, default=False),
+})
+
+@campaign_ns.route('/<int:campaign_id>/criteria')
+class AddCriterion(Resource):
+    @campaign_ns.expect(add_crit_model, validate=True)
+    @campaign_ns.response(201, 'Criterion added successfully')
+    @campaign_ns.response(400, 'Bad Request')
+    @campaign_ns.response(500, 'Internal Server Error')
+    def post(self, campaign_id):
+        """
+        Add a criterion to a campaign.
+        """
+        try:
+            data = request.get_json()
+            result = add_criterion(campaign_id, data)
+            return result, 201
+        except KeyError as e:
+            logging.error(f"Missing key: {e}")
+            return {"error": f"Missing field: {str(e)}"}, 400
+        except SQLAlchemyError as e:
+            logging.exception("Database error occurred")
+            return {"error": "Database operation failed"}, 500
+        except Exception as e:
+            logging.exception("Unexpected error occurred")
+            return {"error": f"Unexpected error: {str(e)}"}, 500
 
 
 
