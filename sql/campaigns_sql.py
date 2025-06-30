@@ -204,3 +204,15 @@ ADD_CRITERION = """
     VALUES 
         (:campaign_id, :column_name, :sql_type, :sql_value, :or_next)
 """
+
+ADD_CAMPAIGN = """
+    INSERT INTO campaigns (name, description, channel, datasource, begin_date)
+    VALUES (:name, :description, :channel, :datasource, :begin_date)
+    RETURNING id
+"""
+
+GET_DROPDOWN_FOR_DATASOURCE = """
+    SELECT datasource FROM campaign_datasources
+
+"""
+
