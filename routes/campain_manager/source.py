@@ -7,10 +7,11 @@ from flask import request, jsonify, current_app
 from sqlalchemy.exc import SQLAlchemyError
 
 from models.campaigns import get_campaign_details, soft_delete_campaign, get_campaigns, undelete_campaign, \
-    get_campaign_edit_data, add_criterion
+    get_campaign_edit_data, add_criterion, add_campaign, get_dropdowns_for_datasources
 from extensions import db
 from sqlalchemy import text
 
+from routes.campain_manager.dropdown_service import get_criteria_options
 from routes.campain_manager.schema import campaign_edit_response, criteria_model
 
 # Define the namespace
@@ -204,10 +205,10 @@ add_crit_model = campaign_ns.model('NewCriterion', {
     "or_next": fields.Boolean(required=False, default=False),
 })
 
-@campaign_ns.route('/<int:campaign_id>/criteria')
+@campaign_ns.route('/<int:campaign_id>/newCriteria')
 class AddCriterion(Resource):
     @campaign_ns.expect(add_crit_model, validate=True)
-    @campaign_ns.response(201, 'Criterion added successfully')
+    @campaign_ns.response(200, 'Criterion added successfully')
     @campaign_ns.response(400, 'Bad Request')
     @campaign_ns.response(500, 'Internal Server Error')
     def post(self, campaign_id):
@@ -217,7 +218,7 @@ class AddCriterion(Resource):
         try:
             data = request.get_json()
             result = add_criterion(campaign_id, data)
-            return result, 201
+            return result, 200
         except KeyError as e:
             logging.error(f"Missing key: {e}")
             return {"error": f"Missing field: {str(e)}"}, 400
@@ -227,6 +228,68 @@ class AddCriterion(Resource):
         except Exception as e:
             logging.exception("Unexpected error occurred")
             return {"error": f"Unexpected error: {str(e)}"}, 500
+
+
+add_campaign_model = campaign_ns.model('NewCampaign', {
+    'name': fields.String(required=True),
+    'description': fields.String(required=True),
+    'channel': fields.String(required=True),
+    'datasource': fields.String(required=True),
+    'begin_date': fields.String(required=True, description='YYYY-MM-DD')
+})
+
+@campaign_ns.route('/addCampaign')
+class AddCampaign(Resource):
+    @campaign_ns.expect(add_campaign_model, validate=True)
+    @campaign_ns.response(200, 'Campaign created successfully')
+    @campaign_ns.response(400, 'Bad Request')
+    @campaign_ns.response(500, 'Internal Server Error')
+    def post(self):
+        """
+        Add a new campaign.
+        """
+        try:
+            data = request.get_json()
+            print(data)
+            result = add_campaign(data)
+            return result, 200
+        except KeyError as e:
+            logging.error(f"Missing field: {e}")
+            return {"error": f"Missing field: {str(e)}"}, 400
+        except SQLAlchemyError:
+            logging.exception("Database error occurred")
+            return {"error": "Database operation failed"}, 500
+        except Exception as e:
+            logging.exception("Unexpected error occurred")
+            return {"error": f"Unexpected error: {str(e)}"}, 500
+
+
+
+@campaign_ns.route('/criteria-options')
+class CriteriaOptions(Resource):
+    @campaign_ns.doc(False)  # Hide from Swagger UI
+    def get(self):
+        try:
+            root_path = current_app.root_path
+            print(root_path)
+            options = get_criteria_options(root_path)
+            return options, 200
+        except Exception as e:
+            return {"error": f"Failed to load criteria options: {str(e)}"}, 500
+
+
+
+
+
+@campaign_ns.route("/form-dropdowns")
+class CampaignFormDropdowns(Resource):
+    def get(self):
+        try:
+            result = get_dropdowns_for_datasources()
+            return result, 200
+        except exception as e:
+            return jsonify({"error": str(e)}), 500
+
 
 
 

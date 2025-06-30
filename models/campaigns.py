@@ -4,7 +4,8 @@ from sqlalchemy.exc import SQLAlchemyError
 
 from extensions import db
 from sql.campaigns_sql import counts_sql_template, states_sql_template, soft_delete_sql, undelete_sql, \
-    GET_ACTIVE_CAMPAIGNS_SQL, GET_DELETED_CAMPAIGNS_SQL, GET_CRITERIA, GET_CAMPAIGN, ADD_CRITERION
+    GET_ACTIVE_CAMPAIGNS_SQL, GET_DELETED_CAMPAIGNS_SQL, GET_CRITERIA, GET_CAMPAIGN, ADD_CRITERION, ADD_CAMPAIGN, \
+     GET_DROPDOWN_FOR_DATASOURCE
 
 
 def get_campaigns(include_deleted):
@@ -153,3 +154,34 @@ def add_criterion(campaign_id, data):
     except SQLAlchemyError as e:
         db.session.rollback()
         raise e
+
+def add_campaign(data):
+    try:
+        result = db.session.execute(text(ADD_CAMPAIGN), {
+            "name": data["name"],
+            "description": data["description"],
+            "channel": data["channel"],
+            "datasource": data["datasource"],
+            "begin_date": data["begin_date"]
+        })
+        print(result)
+        new_id = result.fetchone()[0]
+        print(new_id)
+        db.session.commit()
+        return {"message": "Campaign added successfully", "id": new_id}
+    except SQLAlchemyError as e:
+        db.session.rollback()
+        raise e
+
+
+def get_dropdowns_for_datasources():
+    result = db.session.execute(text(GET_DROPDOWN_FOR_DATASOURCE))
+    rows = result.fetchall()
+    dropdown_set = {row[0] for row in rows if row[0] not in (None, '')}
+
+    dropdown_list = sorted(dropdown_set)
+
+    return {
+        "count": len(dropdown_list),
+        "datasources": dropdown_list
+    }

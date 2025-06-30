@@ -1,0 +1,1275 @@
+CampaignDatasource:
+  CampaignDatasource_policies:
+    datasource: policies
+    tablename: primary_policies
+    subquery_only: false
+    order_by: "company_number DESC, (SELECT (policy ~ '^[0-9]+$')) DESC, policy DESC, insured"
+  CampaignDatasource_noninsurance:
+    datasource: noninsurance
+    tablename: noninsurance_policies
+    subquery_only: true
+  CampaignDatasource_results:
+    datasource: results
+    tablename: telemarketing_results
+    subquery_only: true
+CampaignDatasourceJoin:
+  CampaignDatasourceJoin_1:
+    datasource: CampaignDatasource_policies
+    child_table: telemarketing_results
+    join_on: "p.company_number || p.policy = telemarketing_results.policy_number"
+  CampaignDatasourceJoin_2:
+    datasource: CampaignDatasource_policies
+    child_table: noninsurance_policies
+    join_on: "p.company_number = noninsurance_policies.company_number AND p.policy = noninsurance_policies.policy"
+CampaignDatasourceHousehold:
+  CampaignDatasourceHousehold_1:
+    datasource: CampaignDatasource_policies
+    column_name: address2
+  CampaignDatasourceHousehold_2:
+    datasource: CampaignDatasource_policies
+    column_name: zip_code
+CampaignSubquery:
+  CampaignSubquery_1:
+    label: policy
+    parent_table: policies
+    child_table: noninsurance
+    parent_field: 'p.company_number || p.policy'
+    child_field: 'company_number || policy'
+  CampaignSubquery_2:
+    label: address
+    parent_table: policies
+    child_table: noninsurance
+    parent_field: coalesce(p.address2)||coalesce(p.zip_code)||coalesce(p.state)
+    child_field: "coalesce(address_code,'')"
+  CampaignSubquery_3:
+    label: policy
+    parent_table: policies
+    child_table: results
+    parent_field: 'p.company_number || p.policy'
+    child_field: telemarketing_results.policy_number
+Campaign:
+  Campaign_25:
+    name: 'Stolen ID Telemarketing'
+    channel: Telemarketing
+    deleted_at: '2010-02-26 16:07:14'
+    begin_date: '2009-12-10'
+    description: ''
+    subquery: false
+    datasource: CampaignDatasource_policies
+    created_at: '2009-12-07 12:32:20.914514'
+  Campaign_24:
+    name: Test2
+    channel: 'Direct Mail'
+    deleted_at: '2009-12-02 12:33:04'
+    subquery: false
+    datasource: CampaignDatasource_policies
+    created_at: '2009-12-07 12:32:20.914514'
+  Campaign_32:
+    name: billtest2
+    channel: testing
+    deleted_at: '2009-12-08 15:55:09'
+    begin_date: '2009-12-07'
+    description: ''
+    subquery: false
+    datasource: CampaignDatasource_policies
+    created_at: '2009-12-07 12:32:20.914514'
+  Campaign_26:
+    name: 'Stolen ID test'
+    channel: TM
+    deleted_at: '2009-12-08 15:55:45'
+    subquery: false
+    datasource: CampaignDatasource_policies
+    created_at: '2009-12-07 12:32:20.914514'
+  Campaign_71:
+    name: 'Testing SID against Paula file'
+    channel: Telemarketing
+    begin_date: '2010-01-26'
+    description: ''
+    subquery: false
+    datasource: CampaignDatasource_policies
+    created_at: '2010-01-26 16:56:18.90137'
+  Campaign_13:
+    name: 'DVP Telemarketing'
+    channel: Telemarketing
+    begin_date: '2009-12-08'
+    description: ''
+    subquery: false
+    datasource: CampaignDatasource_policies
+    created_at: '2009-12-07 12:32:20.914514'
+  Campaign_57:
+    name: 'Manual Test'
+    channel: Testing
+    begin_date: '2009-12-18'
+    description: 'This is a test campaign for the user manual'
+    subquery: false
+    datasource: CampaignDatasource_policies
+    created_at: '2009-12-15 00:27:25.94386'
+  Campaign_40:
+    name: 'Noninsurance DVP'
+    channel: Subquery
+    begin_date: '2009-12-08'
+    description: ''
+    subquery: true
+    datasource: CampaignDatasource_noninsurance
+    campaign_subquery_id: CampaignSubquery_1
+  Campaign_41:
+    name: 'Has had Stolen ID'
+    channel: Subquery
+    begin_date: '2009-12-08'
+    description: ''
+    subquery: true
+    datasource: CampaignDatasource_noninsurance
+    campaign_subquery_id: CampaignSubquery_1
+  Campaign_59:
+    name: 'subquery for Manual Test'
+    begin_date: '2009-12-21'
+    subquery: true
+    datasource: CampaignDatasource_noninsurance
+    campaign_subquery_id: CampaignSubquery_1
+    created_at: '2009-12-21 08:41:20.601779'
+  Campaign_60:
+    name: 'subquery for Small Dataset For Testing'
+    begin_date: '2009-12-22'
+    subquery: true
+    datasource: CampaignDatasource_noninsurance
+    campaign_subquery_id: CampaignSubquery_1
+    created_at: '2009-12-22 10:29:31.683336'
+  Campaign_61:
+    name: 'subquery for Testing testing testing'
+    begin_date: '2009-12-22'
+    subquery: true
+    datasource: CampaignDatasource_noninsurance
+    campaign_subquery_id: CampaignSubquery_1
+    created_at: '2009-12-22 10:39:29.41843'
+  Campaign_62:
+    name: 'subquery for Manual Test'
+    begin_date: '2009-12-23'
+    subquery: true
+    datasource: CampaignDatasource_noninsurance
+    campaign_subquery_id: CampaignSubquery_1
+    created_at: '2009-12-23 17:45:38.553376'
+  Campaign_64:
+    name: 'subquery for Small Dataset For Testing'
+    begin_date: '2009-12-31'
+    subquery: true
+    datasource: CampaignDatasource_results
+    campaign_subquery_id: CampaignSubquery_3
+    created_at: '2009-12-31 10:31:13.225865'
+  Campaign_70:
+    name: 'subquery for Stolen ID Telemarketing'
+    begin_date: '2010-01-04'
+    subquery: true
+    datasource: CampaignDatasource_noninsurance
+    campaign_subquery_id: CampaignSubquery_2
+    created_at: '2010-01-04 17:52:48.741085'
+  Campaign_23:
+    name: 'Small Dataset For Testing'
+    channel: Testing
+    begin_date: '2009-12-01'
+    description: 'Produces a small result set so we can test new features more quickly. '
+    subquery: false
+    datasource: CampaignDatasource_policies
+    created_at: '2009-12-07 12:32:20.914514'
+  Campaign_63:
+    name: Test3
+    channel: Testing
+    deleted_at: '2010-01-26 16:55:52'
+    begin_date: '2009-12-29'
+    description: ''
+    subquery: false
+    datasource: CampaignDatasource_policies
+    created_at: '2009-12-29 16:36:58.571083'
+  Campaign_58:
+    name: 'Dec Test'
+    channel: ''
+    deleted_at: '2010-01-26 16:56:00'
+    begin_date: '2009-12-22'
+    description: 'Testing adding and saving during editing'
+    subquery: false
+    datasource: CampaignDatasource_policies
+    created_at: '2009-12-16 08:59:47.83928'
+  Campaign_4:
+    name: 'No Vision/Dental/Pharmacy'
+    channel: 'Direct Mail'
+    deleted_at: '2010-01-26 16:56:12'
+    begin_date: '2009-10-10'
+    description: ''
+    subquery: false
+    datasource: CampaignDatasource_policies
+    created_at: '2009-12-07 12:32:20.914514'
+CampaignCriterion:
+  CampaignCriterion_3:
+    campaign_id: Campaign_32
+    sql_type: equals
+    sql_value: N
+    position: 0
+    or_next: false
+    column_name: do_not_call
+  CampaignCriterion_4:
+    campaign_id: Campaign_32
+    sql_type: equals
+    sql_value: Active
+    position: 1
+    or_next: false
+    column_name: noninsurance_policies.status
+  CampaignCriterion_5:
+    campaign_id: Campaign_32
+    sql_type: not_equal
+    sql_value: DVP1
+    position: 2
+    or_next: false
+    column_name: telemarketing_results.campaign_designate
+  CampaignCriterion_20:
+    campaign_id: Campaign_25
+    sql_type: equals
+    sql_value: INFORCE
+    position: 1
+    or_next: false
+    column_name: status
+  CampaignCriterion_21:
+    campaign_id: Campaign_25
+    sql_type: in
+    sql_value: 'Cred Draft,Direct Bil,Bank Draft'
+    position: 2
+    or_next: false
+    column_name: pay_type
+  CampaignCriterion_23:
+    campaign_id: Campaign_57
+    sql_type: is_empty
+    sql_value: ''
+    position: 1
+    or_next: false
+    column_name: address1
+  CampaignCriterion_24:
+    campaign_id: Campaign_4
+    sql_type: equals
+    sql_value: INFORCE
+    position: 1
+    or_next: true
+    column_name: status
+  CampaignCriterion_25:
+    campaign_id: Campaign_4
+    sql_type: equals
+    sql_value: 'PAID UP'
+    position: 2
+    or_next: true
+    column_name: status
+#  CampaignCriterion_26:
+#    campaign_id: Campaign_4
+#    sql_type: does_not_contain
+#    sql_value: dental
+#    position: 3
+#    or_next: false
+#    column_name: noninsurance_current
+#  CampaignCriterion_27:
+#    campaign_id: Campaign_4
+#    sql_type: does_not_contain
+#    sql_value: vision
+#    position: 4
+#    or_next: false
+#    column_name: noninsurance_current
+#  CampaignCriterion_28:
+#    campaign_id: Campaign_4
+#    sql_type: does_not_contain
+#    sql_value: pharmacy
+#    position: 5
+#    or_next: false
+#    column_name: noninsurance_current
+#  CampaignCriterion_29:
+#    campaign_id: Campaign_4
+#    sql_type: not_equal
+#    sql_value: testing
+#    position: 6
+#    or_next: false
+#    column_name: accidental_death
+  CampaignCriterion_30:
+    campaign_id: Campaign_41
+    sql_type: equals
+    sql_value: SID
+    position: 3
+    or_next: false
+    column_name: provider
+  CampaignCriterion_34:
+    campaign_id: Campaign_25
+    sql_type: not_equal
+    sql_value: '57'
+    position: 7
+    or_next: false
+    column_name: company_number
+  CampaignCriterion_35:
+    campaign_id: Campaign_25
+    sql_type: not_equal
+    sql_value: S
+    position: 8
+    or_next: false
+    column_name: language_flag
+  CampaignCriterion_36:
+    campaign_id: Campaign_25
+    sql_type: not_equal
+    sql_value: Y
+    position: 9
+    or_next: false
+    column_name: do_not_call
+  CampaignCriterion_37:
+    campaign_id: Campaign_25
+    sql_type: equals
+    sql_value: US
+    position: 10
+    or_next: false
+    column_name: county_code
+  CampaignCriterion_38:
+    campaign_id: Campaign_25
+    sql_type: equals
+    sql_value: MONTHLY
+    position: 11
+    or_next: false
+    column_name: mode
+  CampaignCriterion_39:
+    campaign_id: Campaign_25
+    sql_type: not_in
+    sql_value: 'Y,I'
+    position: 12
+    or_next: false
+    column_name: assigned_flag
+  CampaignCriterion_40:
+    campaign_id: Campaign_25
+    sql_type: equals
+    sql_value: H
+    position: 13
+    or_next: false
+    column_name: phone_type
+  CampaignCriterion_41:
+    campaign_id: Campaign_4
+    position: 7
+    or_next: false
+  CampaignCriterion_42:
+    campaign_id: Campaign_4
+    position: 8
+    or_next: false
+  CampaignCriterion_44:
+    campaign_id: Campaign_4
+    position: 9
+    or_next: false
+  CampaignCriterion_46:
+    campaign_id: Campaign_4
+    position: 10
+    or_next: false
+  CampaignCriterion_49:
+    campaign_id: Campaign_23
+    sql_type: equals
+    sql_value: '0'
+    position: 1
+    or_next: false
+    column_name: annual_premium
+  CampaignCriterion_50:
+    campaign_id: Campaign_23
+    sql_type: not_equal
+    sql_value: sadf
+    position: 2
+    or_next: false
+    column_name: policy
+  CampaignCriterion_53:
+    campaign_id: Campaign_58
+    sql_type: not_equal
+    sql_value: nothing
+    position: 1
+    or_next: false
+    column_name: accidental_death
+  CampaignCriterion_54:
+    campaign_id: Campaign_61
+    sql_type: not_empty
+    sql_value: ''
+    position: 3
+    or_next: false
+    column_name: campaign
+  CampaignCriterion_55:
+    campaign_id: Campaign_59
+    sql_type: equals
+    sql_value: ''
+    position: 2
+    or_next: false
+    column_name: ''
+  CampaignCriterion_56:
+    campaign_id: Campaign_57
+    sql_type: in_sub
+    sql_value: '59'
+    position: 3
+    or_next: false
+  CampaignCriterion_57:
+    campaign_id: Campaign_62
+    sql_type: equals
+    sql_value: ''
+    position: 4
+    or_next: false
+    column_name: ''
+  CampaignCriterion_58:
+    campaign_id: Campaign_57
+    sql_type: in_sub
+    sql_value: '62'
+    position: 5
+    or_next: false
+  CampaignCriterion_59:
+    campaign_id: Campaign_57
+    sql_type: equals
+    sql_value: ''
+    position: 6
+    or_next: false
+    column_name: ''
+  CampaignCriterion_11:
+    campaign_id: Campaign_13
+    sql_type: column_equals
+    sql_value: payor_last_name
+    position: 9
+    or_next: false
+    column_name: owner_last_name
+  CampaignCriterion_75:
+    campaign_id: Campaign_71
+    sql_type: not_in
+    sql_value: '57,37,54,55'
+    position: 7
+    or_next: false
+    column_name: company_number
+  CampaignCriterion_12:
+    campaign_id: Campaign_13
+    sql_type: equals
+    sql_value: E
+    position: 10
+    or_next: false
+    column_name: language_flag
+  CampaignCriterion_61:
+    campaign_id: Campaign_63
+    sql_type: not_equal
+    sql_value: '75230'
+    position: 1
+    or_next: false
+    column_name: zip_code
+  CampaignCriterion_88:
+    campaign_id: Campaign_71
+    sql_type: not_in
+    sql_value: 'Cred Draft,Bank Draft'
+    position: 15
+    or_next: true
+    column_name: pay_type
+  CampaignCriterion_83:
+    campaign_id: Campaign_71
+    sql_type: not_equal
+    sql_value: Y
+    position: 16
+    or_next: false
+    column_name: fh_is_beneficiary
+  CampaignCriterion_84:
+    campaign_id: Campaign_71
+    sql_type: is_empty
+    sql_value: ''
+    position: 17
+    or_next: false
+    column_name: bad_address
+  CampaignCriterion_13:
+    campaign_id: Campaign_13
+    sql_type: equals
+    sql_value: H
+    position: 11
+    or_next: false
+    column_name: phone_type
+  CampaignCriterion_32:
+    campaign_id: Campaign_25
+    sql_type: equals
+    sql_value: F
+    position: 3
+    or_next: false
+    column_name: company_division
+  CampaignCriterion_33:
+    campaign_id: Campaign_25
+    sql_type: equals
+    sql_value: WL
+    position: 4
+    or_next: false
+    column_name: line_of_business
+  CampaignCriterion_67:
+    campaign_id: Campaign_70
+    sql_type: equals
+    sql_value: SID
+    position: 5
+    or_next: false
+    column_name: provider
+  CampaignCriterion_68:
+    campaign_id: Campaign_23
+    sql_type: contains
+    sql_value: z
+    position: 3
+    or_next: false
+    column_name: insured_first_name
+  CampaignCriterion_70:
+    campaign_id: Campaign_71
+    sql_type: equals
+    sql_value: INFORCE
+    position: 1
+    or_next: false
+    column_name: status
+  CampaignCriterion_71:
+    campaign_id: Campaign_71
+    sql_type: in
+    sql_value: 'Cred Draft,Direct Bil,Bank Draft'
+    position: 2
+    or_next: false
+    column_name: pay_type
+  CampaignCriterion_72:
+    campaign_id: Campaign_71
+    sql_type: equals
+    sql_value: F
+    position: 3
+    or_next: false
+    column_name: company_division
+  CampaignCriterion_76:
+    campaign_id: Campaign_71
+    sql_type: not_equal
+    sql_value: S
+    position: 8
+    or_next: false
+    column_name: language_flag
+  CampaignCriterion_77:
+    campaign_id: Campaign_71
+    sql_type: not_equal
+    sql_value: Y
+    position: 9
+    or_next: false
+    column_name: do_not_call
+  CampaignCriterion_78:
+    campaign_id: Campaign_71
+    sql_type: equals
+    sql_value: US
+    position: 10
+    or_next: false
+    column_name: county_code
+  CampaignCriterion_79:
+    campaign_id: Campaign_71
+    sql_type: equals
+    sql_value: MONTHLY
+    position: 11
+    or_next: false
+    column_name: mode
+  CampaignCriterion_80:
+    campaign_id: Campaign_71
+    sql_type: not_in
+    sql_value: 'Y,I'
+    position: 12
+    or_next: false
+    column_name: assigned_flag
+  CampaignCriterion_81:
+    campaign_id: Campaign_71
+    sql_type: equals
+    sql_value: H
+    position: 13
+    or_next: false
+    column_name: phone_type
+  CampaignCriterion_14:
+    campaign_id: Campaign_13
+    sql_type: not_equal
+    sql_value: Y
+    position: 12
+    or_next: false
+    column_name: do_not_call
+  CampaignCriterion_1:
+    campaign_id: Campaign_13
+    sql_type: not_in
+    sql_value: '37,38,39,54,55,57,58'
+    position: 13
+    or_next: false
+    column_name: company_number
+  CampaignCriterion_82:
+    campaign_id: Campaign_71
+    sql_type: column_equals
+    sql_value: payor_last_name
+    position: 14
+    or_next: false
+    column_name: owner_last_name
+  CampaignCriterion_2:
+    campaign_id: Campaign_13
+    sql_type: not_in
+    sql_value: 'Y,I'
+    position: 14
+    or_next: false
+    column_name: assigned_flag
+  CampaignCriterion_16:
+    campaign_id: Campaign_13
+    sql_type: is_empty
+    sql_value: ''
+    position: 15
+    or_next: false
+    column_name: bad_address
+  CampaignCriterion_17:
+    campaign_id: Campaign_13
+    sql_type: not_equal
+    sql_value: Y
+    position: 16
+    or_next: false
+    column_name: fh_is_beneficiary
+  CampaignCriterion_22:
+    campaign_id: Campaign_13
+    sql_type: equals
+    sql_value: US
+    position: 17
+    or_next: false
+    column_name: county_code
+  CampaignCriterion_73:
+    campaign_id: Campaign_71
+    sql_type: not_in
+    sql_value: 'ADD,SP'
+    position: 4
+    or_next: false
+    column_name: line_of_business
+  CampaignCriterion_89:
+    campaign_id: Campaign_71
+    sql_type: equals
+    sql_value: O
+    position: 18
+    or_next: true
+    column_name: bad_address
+  CampaignCriterion_85:
+    campaign_id: Campaign_71
+    sql_type: not_equal
+    sql_value: Y
+    position: 19
+    or_next: false
+    column_name: do_not_mail
+  CampaignCriterion_86:
+    campaign_id: Campaign_71
+    sql_type: not_empty
+    sql_value: ''
+    position: 20
+    or_next: false
+    column_name: owner_last_name
+  CampaignCriterion_18:
+    campaign_id: Campaign_40
+    sql_type: in
+    sql_value: 'GDS,BB'
+    position: 1
+    or_next: false
+    column_name: provider
+  CampaignCriterion_19:
+    campaign_id: Campaign_40
+    sql_type: equals
+    sql_value: Active
+    position: 2
+    or_next: false
+    column_name: status
+  CampaignCriterion_15:
+    campaign_id: Campaign_13
+    sql_type: not_in_sub
+    sql_value: '8'
+    position: 3
+    or_next: false
+    column_name: policy
+  CampaignCriterion_6:
+    campaign_id: Campaign_13
+    sql_type: equals
+    sql_value: F
+    position: 4
+    or_next: false
+    column_name: company_division
+  CampaignCriterion_7:
+    campaign_id: Campaign_13
+    sql_type: equals
+    sql_value: WL
+    position: 5
+    or_next: false
+    column_name: line_of_business
+  CampaignCriterion_8:
+    campaign_id: Campaign_13
+    sql_type: equals
+    sql_value: INFORCE
+    position: 6
+    or_next: false
+    column_name: status
+  CampaignCriterion_9:
+    campaign_id: Campaign_13
+    sql_type: in
+    sql_value: 'Direct Bill,Cred Draft,Bank Draft'
+    position: 7
+    or_next: false
+    column_name: pay_type
+  CampaignCriterion_10:
+    campaign_id: Campaign_13
+    sql_type: equals
+    sql_value: MONTHLY
+    position: 8
+    or_next: false
+    column_name: mode
+CampaignListFieldset:
+  CampaignListFieldset_1:
+    label: Default
+    datasource: CampaignDatasource_policies
+  CampaignListFieldset_2:
+    label: 'Policy Only'
+    datasource: CampaignDatasource_policies
+  CampaignListFieldset_3:
+    label: All
+    datasource: CampaignDatasource_policies
+  CampaignListFieldset_4:
+    label: 'All Policy fields'
+    datasource: CampaignDatasource_policies
+CampaignListFieldsetField:
+  CampaignListFieldsetField_1_company_number:
+    fieldset_id: CampaignListFieldset_1
+    field: company_number
+  CampaignListFieldsetField_1_policy:
+    fieldset_id: CampaignListFieldset_1
+    field: policy
+  CampaignListFieldsetField_1_owner_first_name:
+    fieldset_id: CampaignListFieldset_1
+    field: owner_first_name
+  CampaignListFieldsetField_1_owner_last_name:
+    fieldset_id: CampaignListFieldset_1
+    field: owner_last_name
+  CampaignListFieldsetField_1_address1:
+    fieldset_id: CampaignListFieldset_1
+    field: address1
+  CampaignListFieldsetField_1_address2:
+    fieldset_id: CampaignListFieldset_1
+    field: address2
+  CampaignListFieldsetField_1_city:
+    fieldset_id: CampaignListFieldset_1
+    field: city
+  CampaignListFieldsetField_1_state:
+    fieldset_id: CampaignListFieldset_1
+    field: state
+  CampaignListFieldsetField_1_zip_code:
+    fieldset_id: CampaignListFieldset_1
+    field: zip_code
+  CampaignListFieldsetField_1_insured_first_name:
+    fieldset_id: CampaignListFieldset_1
+    field: insured_first_name
+  CampaignListFieldsetField_1_insured_last_name:
+    fieldset_id: CampaignListFieldset_1
+    field: insured_last_name
+  CampaignListFieldsetField_1_gender:
+    fieldset_id: CampaignListFieldset_1
+    field: gender
+  CampaignListFieldsetField_1_phone_number:
+    fieldset_id: CampaignListFieldset_1
+    field: phone_number
+  CampaignListFieldsetField_2_company_number:
+    fieldset_id: CampaignListFieldset_2
+    field: company_number
+  CampaignListFieldsetField_2_policy:
+    fieldset_id: CampaignListFieldset_2
+    field: policy
+  'CampaignListFieldsetField_3_*':
+    fieldset_id: CampaignListFieldset_3
+    field: '*'
+  CampaignListFieldsetField_4_accidental_death:
+    fieldset_id: CampaignListFieldset_4
+    field: accidental_death
+  CampaignListFieldsetField_4_add_camp:
+    fieldset_id: CampaignListFieldset_4
+    field: add_camp
+  CampaignListFieldsetField_4_add_units:
+    fieldset_id: CampaignListFieldset_4
+    field: add_units
+  CampaignListFieldsetField_4_address1:
+    fieldset_id: CampaignListFieldset_4
+    field: address1
+  CampaignListFieldsetField_4_address2:
+    fieldset_id: CampaignListFieldset_4
+    field: address2
+  CampaignListFieldsetField_4_annual_premium:
+    fieldset_id: CampaignListFieldset_4
+    field: annual_premium
+  CampaignListFieldsetField_4_assigned_flag:
+    fieldset_id: CampaignListFieldset_4
+    field: assigned_flag
+  CampaignListFieldsetField_4_bad_address:
+    fieldset_id: CampaignListFieldset_4
+    field: bad_address
+  CampaignListFieldsetField_4_business_owner:
+    fieldset_id: CampaignListFieldset_4
+    field: business_owner
+  CampaignListFieldsetField_4_child_rider_units:
+    fieldset_id: CampaignListFieldset_4
+    field: child_rider_units
+  CampaignListFieldsetField_4_city:
+    fieldset_id: CampaignListFieldset_4
+    field: city
+  CampaignListFieldsetField_4_class:
+    fieldset_id: CampaignListFieldset_4
+    field: class
+  CampaignListFieldsetField_4_company_division:
+    fieldset_id: CampaignListFieldset_4
+    field: company_division
+  CampaignListFieldsetField_4_company_number:
+    fieldset_id: CampaignListFieldset_4
+    field: company_number
+  CampaignListFieldsetField_4_date_of_birth:
+    fieldset_id: CampaignListFieldset_4
+    field: date_of_birth
+  CampaignListFieldsetField_4_do_not_call:
+    fieldset_id: CampaignListFieldset_4
+    field: do_not_call
+  CampaignListFieldsetField_4_do_not_mail:
+    fieldset_id: CampaignListFieldset_4
+    field: do_not_mail
+  CampaignListFieldsetField_4_draft_premium:
+    fieldset_id: CampaignListFieldset_4
+    field: draft_premium
+  CampaignListFieldsetField_4_face_amount:
+    fieldset_id: CampaignListFieldset_4
+    field: face_amount
+  CampaignListFieldsetField_4_fcgs_membership:
+    fieldset_id: CampaignListFieldset_4
+    field: fcgs_membership
+  CampaignListFieldsetField_4_fh_is_beneficiary:
+    fieldset_id: CampaignListFieldset_4
+    field: fh_is_beneficiary
+  CampaignListFieldsetField_4_gender:
+    fieldset_id: CampaignListFieldset_4
+    field: gender
+  CampaignListFieldsetField_4_insured:
+    fieldset_id: CampaignListFieldset_4
+    field: insured
+  CampaignListFieldsetField_4_insured_first_name:
+    fieldset_id: CampaignListFieldset_4
+    field: insured_first_name
+  CampaignListFieldsetField_4_insured_last_name:
+    fieldset_id: CampaignListFieldset_4
+    field: insured_last_name
+  CampaignListFieldsetField_4_insured_middle_name:
+    fieldset_id: CampaignListFieldset_4
+    field: insured_middle_name
+  CampaignListFieldsetField_4_insured_prefix:
+    fieldset_id: CampaignListFieldset_4
+    field: insured_prefix
+  CampaignListFieldsetField_4_insured_suffix:
+    fieldset_id: CampaignListFieldset_4
+    field: insured_suffix
+  CampaignListFieldsetField_4_issue_age:
+    fieldset_id: CampaignListFieldset_4
+    field: issue_age
+  CampaignListFieldsetField_4_issue_date:
+    fieldset_id: CampaignListFieldset_4
+    field: issue_date
+  CampaignListFieldsetField_4_language_flag:
+    fieldset_id: CampaignListFieldset_4
+    field: language_flag
+  CampaignListFieldsetField_4_line_of_business:
+    fieldset_id: CampaignListFieldset_4
+    field: line_of_business
+  CampaignListFieldsetField_4_mga:
+    fieldset_id: CampaignListFieldset_4
+    field: mga
+  CampaignListFieldsetField_4_mmga:
+    fieldset_id: CampaignListFieldset_4
+    field: mmga
+  CampaignListFieldsetField_4_mode:
+    fieldset_id: CampaignListFieldset_4
+    field: mode
+  CampaignListFieldsetField_4_monthly_premium:
+    fieldset_id: CampaignListFieldset_4
+    field: monthly_premium
+  CampaignListFieldsetField_4_owner_first_name:
+    fieldset_id: CampaignListFieldset_4
+    field: owner_first_name
+  CampaignListFieldsetField_4_owner_last_name:
+    fieldset_id: CampaignListFieldset_4
+    field: owner_last_name
+  CampaignListFieldsetField_4_owner_middle_name:
+    fieldset_id: CampaignListFieldset_4
+    field: owner_middle_name
+  CampaignListFieldsetField_4_owner_prefix:
+    fieldset_id: CampaignListFieldset_4
+    field: owner_prefix
+  CampaignListFieldsetField_4_owner_suffix:
+    fieldset_id: CampaignListFieldset_4
+    field: owner_suffix
+  CampaignListFieldsetField_4_paid_to:
+    fieldset_id: CampaignListFieldset_4
+    field: paid_to
+  CampaignListFieldsetField_4_pay_type:
+    fieldset_id: CampaignListFieldset_4
+    field: pay_type
+  CampaignListFieldsetField_4_payor_first_name:
+    fieldset_id: CampaignListFieldset_4
+    field: payor_first_name
+  CampaignListFieldsetField_4_payor_last_name:
+    fieldset_id: CampaignListFieldset_4
+    field: payor_last_name
+  CampaignListFieldsetField_4_payor_middle_name:
+    fieldset_id: CampaignListFieldset_4
+    field: payor_middle_name
+  CampaignListFieldsetField_4_payor_prefix:
+    fieldset_id: CampaignListFieldset_4
+    field: payor_prefix
+  CampaignListFieldsetField_4_payor_suffix:
+    fieldset_id: CampaignListFieldset_4
+    field: payor_suffix
+  CampaignListFieldsetField_4_phone_number:
+    fieldset_id: CampaignListFieldset_4
+    field: phone_number
+  CampaignListFieldsetField_4_phone_type:
+    fieldset_id: CampaignListFieldset_4
+    field: phone_type
+  CampaignListFieldsetField_4_plan:
+    fieldset_id: CampaignListFieldset_4
+    field: plan
+  CampaignListFieldsetField_4_policy:
+    fieldset_id: CampaignListFieldset_4
+    field: policy
+  CampaignListFieldsetField_4_premiums_payable_period:
+    fieldset_id: CampaignListFieldset_4
+    field: premiums_payable_period
+  CampaignListFieldsetField_4_quarterly_premium:
+    fieldset_id: CampaignListFieldset_4
+    field: quarterly_premium
+  CampaignListFieldsetField_4_semiannual_premium:
+    fieldset_id: CampaignListFieldset_4
+    field: semiannual_premium
+  CampaignListFieldsetField_4_state:
+    fieldset_id: CampaignListFieldset_4
+    field: state
+  CampaignListFieldsetField_4_status:
+    fieldset_id: CampaignListFieldset_4
+    field: status
+  CampaignListFieldsetField_4_zip_code:
+    fieldset_id: CampaignListFieldset_4
+    field: zip_code
+
+Login:
+  Login_chele:
+    name: chele
+    password: kdawg
+    homepage: leadcenter
+    created_at: '2009-06-19 09:35:02.91714'
+  Login_lburnett:
+    name: lburnett
+    password: kdawg
+    homepage: leadcenter
+    created_at: '2009-06-19 09:35:02.91714'
+  Login_tran:
+    name: tran
+    password: kdawg
+    homepage: leadcenter
+    created_at: '2009-06-19 09:35:02.91714'
+  Login_bjohn:
+    name: bjohn
+    password: kdawg
+    homepage: cms
+    created_at: '2009-07-23 16:19:53.65788'
+  Login_fmcgovan:
+    name: fmcgovan
+    password: kdawg
+    homepage: cms
+    display_name: 'Fran McGoven'
+    created_at: '2009-10-27 15:01:05.840769'
+  Login_kbarnard:
+    name: kbarnard
+    password: kdawg
+    homepage: campaign
+    display_name: 'Kevin Barnard'
+    created_at: '2009-06-19 09:35:02.91714'
+  Login_cberger:
+    name: cberger
+    password: kdawg
+    homepage: policy_print
+    display_name: ''
+    created_at: '2009-06-19 09:35:02.91714'
+  Login_msimon:
+    name: msimon
+    password: kdawg
+    homepage: policy_print
+    display_name: ''
+    created_at: '2009-10-27 15:59:08.048649'
+  Login_lisa:
+    name: lisa
+    password: kdawg
+    homepage: policy_print
+    display_name: 'Lisa Burnett'
+    created_at: '2009-10-29 10:57:07.0108'
+  Login_schenita:
+    name: schenita
+    password: kdawg
+    homepage: policy_print
+    display_name: ''
+    created_at: '2009-10-29 10:58:17.573756'
+  Login_londen:
+    name: londen
+    password: kdawg
+    homepage: policy_print
+    display_name: Londen
+    created_at: '2009-11-04 10:27:53.70333'
+  Login_olga:
+    name: olga
+    password: kdawg
+    homepage: policy_print
+    display_name: Olga
+    created_at: '2009-10-29 10:57:55.837032'
+  Login_Beth:
+    name: Beth
+    password: kdawg
+    homepage: policy_print
+    display_name: 'Beth Maddestra'
+    created_at: '2009-11-11 08:27:01.100567'
+  Login_Maday:
+    name: Maday
+    password: kdawg
+    homepage: policy_print
+    display_name: 'Maday Villa'
+    created_at: '2009-11-11 08:27:37.11222'
+  Login_Norman:
+    name: Norman
+    password: kdawg
+    homepage: policy_print
+    display_name: 'Norman Beazer'
+    created_at: '2009-11-11 08:28:04.697017'
+  Login_Jesse:
+    name: Jesse
+    password: kdawg
+    homepage: policy_print
+    display_name: 'Jesse Allen'
+    created_at: '2009-11-11 08:28:33.670236'
+  Login_paula:
+    name: paula
+    password: kdawg
+    homepage: policy_print
+    display_name: 'Paula Rodriguez'
+    created_at: '2009-11-17 09:29:50.35547'
+  Login_bwarren:
+    name: bwarren
+    password: kdawg
+    homepage: cms
+    display_name: 'Bill Warren'
+    created_at: '2009-12-03 11:04:12.338205'
+  Login_klavallee:
+    name: klavallee
+    password: kdawg
+    homepage: cms
+    display_name: 'katy lavallee'
+    email: katy.lavallee@laser2mail.com
+    created_at: '2009-11-30 12:58:09.921013'
+  Login_londenadmin:
+    name: londenadmin
+    password: kdawg
+    homepage: leadcenter
+    display_name: Londen
+    email: ''
+    created_at: '2009-06-19 09:35:02.91714'
+Permission:
+  'Permission_Upload P/I':
+    name: 'Upload P/I'
+    description: 'Upload Postage and Inventory files to Lead Center.'
+    internal_only: true
+  Permission_rd:
+    name: rd
+    description: 'Relational Database'
+    internal_only: false
+  Permission_cms:
+    name: cms
+    description: Campaigns
+    internal_only: false
+  'Permission_User Admin':
+    name: 'User Admin'
+    description: 'Admin all users'
+    internal_only: true
+  Permission_policyprint:
+    name: policyprint
+    description: 'Policy Print'
+    internal_only: false
+  Permission_leadcenter:
+    name: leadcenter
+    description: 'Lead Center'
+    internal_only: false
+  Permission_dashboard:
+    name: dashboard
+    description: Dashboard
+    internal_only: false
+LoginPermission:
+  'LoginPermission_chele_Upload P/I':
+    login_name: Login_chele
+    permission_name: 'Permission_Upload P/I'
+  'LoginPermission_kbarnard_Upload P/I':
+    login_name: Login_kbarnard
+    permission_name: 'Permission_Upload P/I'
+  'LoginPermission_lburnett_Upload P/I':
+    login_name: Login_lburnett
+    permission_name: 'Permission_Upload P/I'
+  'LoginPermission_tran_Upload P/I':
+    login_name: Login_tran
+    permission_name: 'Permission_Upload P/I'
+  LoginPermission_chele_rd:
+    login_name: Login_chele
+    permission_name: Permission_rd
+  LoginPermission_kbarnard_rd:
+    login_name: Login_kbarnard
+    permission_name: Permission_rd
+  LoginPermission_lburnett_rd:
+    login_name: Login_lburnett
+    permission_name: Permission_rd
+  LoginPermission_tran_rd:
+    login_name: Login_tran
+    permission_name: Permission_rd
+  LoginPermission_chele_cms:
+    login_name: Login_chele
+    permission_name: Permission_cms
+  LoginPermission_lburnett_cms:
+    login_name: Login_lburnett
+    permission_name: Permission_cms
+  LoginPermission_tran_cms:
+    login_name: Login_tran
+    permission_name: Permission_cms
+  'LoginPermission_chele_User Admin':
+    login_name: Login_chele
+    permission_name: 'Permission_User Admin'
+  'LoginPermission_kbarnard_User Admin':
+    login_name: Login_kbarnard
+    permission_name: 'Permission_User Admin'
+  'LoginPermission_lburnett_User Admin':
+    login_name: Login_lburnett
+    permission_name: 'Permission_User Admin'
+  'LoginPermission_tran_User Admin':
+    login_name: Login_tran
+    permission_name: 'Permission_User Admin'
+  LoginPermission_chele_policyprint:
+    login_name: Login_chele
+    permission_name: Permission_policyprint
+  LoginPermission_kbarnard_policyprint:
+    login_name: Login_kbarnard
+    permission_name: Permission_policyprint
+  LoginPermission_lburnett_policyprint:
+    login_name: Login_lburnett
+    permission_name: Permission_policyprint
+  LoginPermission_tran_policyprint:
+    login_name: Login_tran
+    permission_name: Permission_policyprint
+  LoginPermission_cberger_leadcenter:
+    login_name: Login_cberger
+    permission_name: Permission_leadcenter
+  LoginPermission_londenadmin_leadcenter:
+    login_name: Login_londenadmin
+    permission_name: Permission_leadcenter
+  LoginPermission_chele_leadcenter:
+    login_name: Login_chele
+    permission_name: Permission_leadcenter
+  LoginPermission_kbarnard_leadcenter:
+    login_name: Login_kbarnard
+    permission_name: Permission_leadcenter
+  LoginPermission_lburnett_leadcenter:
+    login_name: Login_lburnett
+    permission_name: Permission_leadcenter
+  LoginPermission_tran_leadcenter:
+    login_name: Login_tran
+    permission_name: Permission_leadcenter
+  LoginPermission_cberger_policyprint:
+    login_name: Login_cberger
+    permission_name: Permission_policyprint
+  LoginPermission_londenadmin_policyprint:
+    login_name: Login_londenadmin
+    permission_name: Permission_policyprint
+  LoginPermission_kbarnard_cms:
+    login_name: Login_kbarnard
+    permission_name: Permission_cms
+  LoginPermission_bjohn_cms:
+    login_name: Login_bjohn
+    permission_name: Permission_cms
+  LoginPermission_bjohn_rd:
+    login_name: Login_bjohn
+    permission_name: Permission_rd
+  LoginPermission_fmcgovan_cms:
+    login_name: Login_fmcgovan
+    permission_name: Permission_cms
+  LoginPermission_fmcgovan_rd:
+    login_name: Login_fmcgovan
+    permission_name: Permission_rd
+  LoginPermission_msimon_leadcenter:
+    login_name: Login_msimon
+    permission_name: Permission_leadcenter
+  LoginPermission_msimon_policyprint:
+    login_name: Login_msimon
+    permission_name: Permission_policyprint
+  LoginPermission_lisa_policyprint:
+    login_name: Login_lisa
+    permission_name: Permission_policyprint
+  LoginPermission_olga_policyprint:
+    login_name: Login_olga
+    permission_name: Permission_policyprint
+  LoginPermission_schenita_cms:
+    login_name: Login_schenita
+    permission_name: Permission_cms
+  LoginPermission_schenita_leadcenter:
+    login_name: Login_schenita
+    permission_name: Permission_leadcenter
+  LoginPermission_schenita_policyprint:
+    login_name: Login_schenita
+    permission_name: Permission_policyprint
+  LoginPermission_schenita_rd:
+    login_name: Login_schenita
+    permission_name: Permission_rd
+  LoginPermission_londen_cms:
+    login_name: Login_londen
+    permission_name: Permission_cms
+  LoginPermission_londen_leadcenter:
+    login_name: Login_londen
+    permission_name: Permission_leadcenter
+  LoginPermission_londen_policyprint:
+    login_name: Login_londen
+    permission_name: Permission_policyprint
+  LoginPermission_londen_rd:
+    login_name: Login_londen
+    permission_name: Permission_rd
+  LoginPermission_olga_leadcenter:
+    login_name: Login_olga
+    permission_name: Permission_leadcenter
+  LoginPermission_olga_rd:
+    login_name: Login_olga
+    permission_name: Permission_rd
+  LoginPermission_Beth_leadcenter:
+    login_name: Login_Beth
+    permission_name: Permission_leadcenter
+  LoginPermission_Beth_policyprint:
+    login_name: Login_Beth
+    permission_name: Permission_policyprint
+  LoginPermission_Maday_leadcenter:
+    login_name: Login_Maday
+    permission_name: Permission_leadcenter
+  LoginPermission_Maday_policyprint:
+    login_name: Login_Maday
+    permission_name: Permission_policyprint
+  LoginPermission_Norman_leadcenter:
+    login_name: Login_Norman
+    permission_name: Permission_leadcenter
+  LoginPermission_Norman_policyprint:
+    login_name: Login_Norman
+    permission_name: Permission_policyprint
+  LoginPermission_Jesse_leadcenter:
+    login_name: Login_Jesse
+    permission_name: Permission_leadcenter
+  LoginPermission_Jesse_policyprint:
+    login_name: Login_Jesse
+    permission_name: Permission_policyprint
+  LoginPermission_paula_leadcenter:
+    login_name: Login_paula
+    permission_name: Permission_leadcenter
+  LoginPermission_paula_policyprint:
+    login_name: Login_paula
+    permission_name: Permission_policyprint
+  LoginPermission_klavallee_cms:
+    login_name: Login_klavallee
+    permission_name: Permission_cms
+  LoginPermission_klavallee_leadcenter:
+    login_name: Login_klavallee
+    permission_name: Permission_leadcenter
+  LoginPermission_klavallee_policyprint:
+    login_name: Login_klavallee
+    permission_name: Permission_policyprint
+  LoginPermission_klavallee_rd:
+    login_name: Login_klavallee
+    permission_name: Permission_rd
+  'LoginPermission_klavallee_Upload P/I':
+    login_name: Login_klavallee
+    permission_name: 'Permission_Upload P/I'
+  'LoginPermission_klavallee_User Admin':
+    login_name: Login_klavallee
+    permission_name: 'Permission_User Admin'
+  LoginPermission_bwarren_cms:
+    login_name: Login_bwarren
+    permission_name: Permission_cms
+  LoginPermission_kbarnard_dashboard:
+    login_name: Login_kbarnard
+    permission_name: Permission_dashboard
