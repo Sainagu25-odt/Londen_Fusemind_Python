@@ -3,16 +3,17 @@ from logging import exception
 
 from flask_restx import Namespace, Resource, fields, reqparse
 
-from flask import request, jsonify, current_app
+from flask import request, jsonify, current_app, g
 from sqlalchemy.exc import SQLAlchemyError
 
 from models.campaigns import get_campaign_details, soft_delete_campaign, get_campaigns, undelete_campaign, \
-    get_campaign_edit_data, add_criterion, add_campaign, get_dropdowns_for_datasources
+    get_campaign_edit_data, add_criterion, add_campaign, get_dropdowns_for_datasources, build_campaign_request_response
 from extensions import db
 from sqlalchemy import text
 
 from routes.campain_manager.dropdown_service import get_criteria_options
 from routes.campain_manager.schema import campaign_edit_response, criteria_model
+from utils.token import token_required
 
 # Define the namespace
 campaign_ns = Namespace('campaigns', description='Campaign related operations')
@@ -43,6 +44,7 @@ campaign_model = campaign_ns.model('Campaign', {
 
 @campaign_ns.route('')
 class CampaignList(Resource):
+    @token_required(current_app)
     @campaign_ns.doc('get_campaigns')
     @campaign_ns.expect(campaign_parser)
     @campaign_ns.marshal_list_with(campaign_model, envelope='campaigns')
@@ -144,6 +146,7 @@ class CampaignDetail(Resource):
 
 @campaign_ns.route('/<int:campaign_id>/delete')
 class DeleteCampaign(Resource):
+    @token_required(current_app)
     @campaign_ns.doc(description="Soft delete a campaign")
     def get(self, campaign_id):
         try:
@@ -158,6 +161,7 @@ campaign_ns.models[criteria_model.name] = criteria_model
 
 @campaign_ns.route('/<int:campaign_id>/undelete')
 class DeleteCampaign(Resource):
+    @token_required(current_app)
     @campaign_ns.doc(description="Restore (undelete) a campaign")
     def get(self, campaign_id):
         try:
@@ -192,6 +196,7 @@ edit_response = campaign_ns.model('EditCampaignResponse', {
 @campaign_ns.route('/<int:campaign_id>/edit')
 @campaign_ns.doc(params={'show_counts': 'Set to 1 to include counts'})
 class EditCampaign(Resource):
+    @token_required(current_app)
     @campaign_ns.expect(edit_parser)
     @campaign_ns.marshal_with(edit_response)
     def get(self, campaign_id):
@@ -207,6 +212,7 @@ add_crit_model = campaign_ns.model('NewCriterion', {
 
 @campaign_ns.route('/<int:campaign_id>/newCriteria')
 class AddCriterion(Resource):
+    @token_required(current_app)
     @campaign_ns.expect(add_crit_model, validate=True)
     @campaign_ns.response(200, 'Criterion added successfully')
     @campaign_ns.response(400, 'Bad Request')
@@ -240,6 +246,7 @@ add_campaign_model = campaign_ns.model('NewCampaign', {
 
 @campaign_ns.route('/addCampaign')
 class AddCampaign(Resource):
+    @token_required(current_app)
     @campaign_ns.expect(add_campaign_model, validate=True)
     @campaign_ns.response(200, 'Campaign created successfully')
     @campaign_ns.response(400, 'Bad Request')
@@ -287,10 +294,20 @@ class CampaignFormDropdowns(Resource):
         try:
             result = get_dropdowns_for_datasources()
             return result, 200
-        except exception as e:
+        except Exception as e:
             return jsonify({"error": str(e)}), 500
 
 
+@campaign_ns.route("/<int:campaign_id>/request")
+class CampaignPullRequest(Resource):
+    @token_required(current_app)
+    def get(self,campaign_id):
+        try:
+            result = build_campaign_request_response(campaign_id, g.current_user)
+            return result, 200  # ensure response order is preserved
+        except Exception as e:
+            current_app.logger.error(f"Error in campaign request API: {str(e)}")
+            return {"error": "Internal server error"}, 500
 
 
 

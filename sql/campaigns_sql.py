@@ -213,6 +213,43 @@ ADD_CAMPAIGN = """
 
 GET_DROPDOWN_FOR_DATASOURCE = """
     SELECT datasource FROM campaign_datasources
-
 """
 
+GET_USER_FROM_TOKEN = """
+SELECT username, email
+FROM users
+WHERE token = :token
+"""
+
+GET_CAMPAIGN_DETAILS_BY_ID = """
+SELECT id, name FROM campaigns WHERE id = :campaign_id
+"""
+
+
+GET_PREBUILT_FIELDSETS_BY_CAMPAIGN = """
+SELECT id, label FROM campaign_list_fieldsets
+WHERE datasource = (
+    SELECT datasource FROM campaigns WHERE id = :campaign_id
+)
+"""
+
+GET_CAMPAIGN_COLUMNS_BY_ID = """
+SELECT column_name FROM campaign_criteria WHERE campaign_id = :campaign_id
+"""
+
+# Previous pulls for this campaign
+GET_PREVIOUS_PULLS_BY_CAMPAIGN = """
+SELECT name, requested_at, requested_by, householding, every_n, num_records
+FROM campaign_lists
+WHERE campaign_id = :campaign_id
+AND completed_at IS NOT NULL
+ORDER BY requested_at DESC
+"""
+
+GET_ACTIVE_PULLS_BY_CAMPAIGN = """
+SELECT name, requested_at, requested_by, householding, every_n, num_records
+FROM campaign_lists
+WHERE campaign_id = :campaign_id
+AND completed_at IS NULL
+ORDER BY requested_at DESC
+"""
