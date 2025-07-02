@@ -1,69 +1,67 @@
+from logging import exception
+
 from flask_restx import Namespace, Resource, fields, reqparse
 
-from flask import request, jsonify, current_app
+from flask import request, jsonify, current_app, g
 
-from models.reports_source import process_feedmanager_report
-from routes.reports.schema import report_parser, swagger_parser
-from sql.reports_sql import get_reports_responder_file_data
+from models.reports_source import get_responder_data, fetch_feed_manager_data
+from routes.reports.schema import get_responder_file_models,get_feedManager_models
+
 from utils.token import token_required
 
 reports_ns = Namespace('reports', description='Reports APIs')
 
+record_model, response_model = get_responder_file_models(reports_ns)
 
-@reports_ns.route('/responderfile')
+@reports_ns.route('/responderFile')
 class ResponderFile(Resource):
     @token_required(current_app)
-    def get(self, current_user):
-        try:
-            data = get_reports_responder_file_data()
-            return jsonify(data), 200
-        except Exception as e:
-            return {'error' : str(e)}, 500
-
-
-
-feed_manager_parser = reqparse.RequestParser()
-feed_manager_parser.add_argument('results', type=int, required=True, help='Page size (required)')
-feed_manager_parser.add_argument('startIndex', type=int, required=True, help='Pagination start index (required)')
-feed_manager_parser.add_argument('sort', type=str, required=True, help='Sort field (required)')
-feed_manager_parser.add_argument('dir', type=str, required=True, choices=('asc', 'desc'), help='Sort direction (required)')
-feed_manager_parser.add_argument('date_from', type=str, required=False, help='Start date in MM/DD/YYYY format (optional)')
-feed_manager_parser.add_argument('date_to', type=str, required=False, help='End date in MM/DD/YYYY format (optional)')
-feed_manager_parser.add_argument('report_type', type=str, required=False)
-feed_manager_parser.add_argument('report_group', type=str, default='downloaded_at')
-
-@reports_ns.route('/feedManager')
-class FeedManagerReport(Resource):
-    # @token_required(current_app)
-    @reports_ns.expect(feed_manager_parser)
+    @reports_ns.doc(description="Get responder file report")
+    @reports_ns.marshal_with(response_model)
     def get(self):
         try:
-            args = feed_manager_parser.parse_args()
-            response_data = process_feedmanager_report(args)
-            return response_data, 200
+            result = get_responder_data()
+            return result, 200
         except Exception as e:
-            return {'error': str(e)}, 500
-
-
-response_rates_task1_parser = reqparse.RequestParser()
-response_rates_task1_parser.add_argument('id', type = int, required = True)
-response_rates_task1_parser.add_argument('results', type=int, required=True, help='Page size (required)')
-response_rates_task1_parser.add_argument('startIndex', type=int, required=True, help='Pagination start index (required)')
-response_rates_task1_parser.add_argument('sort', type=str, required=True, help='Sort field (required)')
-response_rates_task1_parser.add_argument('dir', type=str, required=True, choices=('asc', 'desc'), help='Sort direction (required)')
-response_rates_task1_parser.add_argument('report_group', type=str, default='downloaded_at')
+            reports_ns.abort(500, f"ResponderFile API Error: {str(e)}")
 
 
 
+feed_manager_record_model, feed_manager_response_model = get_feedManager_models(reports_ns)
 
+@reports_ns.route("/feedManager")
+class FeedManager(Resource):
+    @token_required(current_app)
+    @reports_ns.doc(params={
+        "date_from": "Start date (YYYY-MM-DD), optional",
+        "date_to": "End date (YYYY-MM-DD), optional",
+        "startIndex": "Start index for pagination (default 0)",
+        "results": "Page size (default 25)",
+        "sort": "Sort key (e.g., downloaded_at)",
+        "dir": "Sort direction (asc or desc)"
+    })
+    @reports_ns.marshal_with(feed_manager_response_model)
+    def get(self):
+        try:
+            date_from = request.args.get("date_from")
+            date_to = request.args.get("date_to")
+            start_index = int(request.args.get("startIndex", 0))
+            page_size = int(request.args.get("results", 25))
+            sort = request.args.get("sort")
+            dir_ = request.args.get("dir", "asc")
 
-# @reports_ns.route('/responseRates')
-# class ResponseRates(Resource):
-#     @reports_ns.expect(response_rates_task1_parser)
-#     def get(self):
-#         try:
-#             args = response_rates_task1_parser.parse_args()
-#             response_data = process_response_rates()
+            return fetch_feed_manager_data(
+                date_from=date_from,
+                date_to=date_to,
+                start_index=start_index,
+                page_size=page_size,
+                sort=sort,
+                dir_=dir_
+            ), 200
+
+        except Exception as e:
+            reports_ns.abort(500, f"FeedManager API Error: {str(e)}")
+
 
 
 
