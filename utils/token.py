@@ -10,7 +10,7 @@ from models.user import find_user_by_username
 def generate_token( user):
     payload = {
         'name': user["name"],
-        'exp': datetime.utcnow() + timedelta(hours=5)
+        'exp': datetime.utcnow() + timedelta(hours=30)
     }
     return jwt.encode(payload, current_app.config['SECRET_KEY'], algorithm="HS256")
 
@@ -57,7 +57,7 @@ def token_required(app):
             # Step 3: Create new token (after validation success)
             new_payload = {
                 'name': current_user['name'],
-                'exp': datetime.utcnow() + timedelta(minutes=1)  # expires in 1 min
+                'exp': datetime.utcnow() + timedelta(minutes=5)  # expires in 1 min
             }
             new_token = jwt.encode(new_payload, app.config['SECRET_KEY'], algorithm="HS256")
 

@@ -6,7 +6,8 @@ from extensions import db
 from sql.campaigns_sql import counts_sql_template, states_sql_template, soft_delete_sql, undelete_sql, \
     GET_ACTIVE_CAMPAIGNS_SQL, GET_DELETED_CAMPAIGNS_SQL, GET_CRITERIA, GET_CAMPAIGN, ADD_CRITERION, ADD_CAMPAIGN, \
     GET_DROPDOWN_FOR_DATASOURCE, GET_USER_FROM_TOKEN, GET_CAMPAIGN_DETAILS_BY_ID, GET_PREBUILT_FIELDSETS_BY_CAMPAIGN, \
-    GET_CAMPAIGN_COLUMNS_BY_ID, GET_PREVIOUS_PULLS_BY_CAMPAIGN, GET_ACTIVE_PULLS_BY_CAMPAIGN
+    GET_CAMPAIGN_COLUMNS_BY_ID, GET_PREVIOUS_PULLS_BY_CAMPAIGN, GET_ACTIVE_PULLS_BY_CAMPAIGN, GET_LATEST_PULL_SETTINGS, \
+    INSERT_PULL_LIST
 
 from datetime import datetime, timedelta
 
@@ -212,7 +213,7 @@ def build_campaign_request_response(campaign_id, user):
 
     now = datetime.now()
     day = now.day  # This gives day without leading zero on all platforms
-    list_title = f"{campaign['name']} {now.strftime('%b')} {day}, {now.strftime('%Y %I:%M:%S%p').lower()}"
+    list_title = f"{campaign['channel']} {campaign['name']} {now.strftime('%b')} {day}, {now.strftime('%Y %I:%M:%S%p').lower()}"
 
     # Prebuilt fieldsets based on datasource of campaign
     fieldsets = db.session.execute(text(GET_PREBUILT_FIELDSETS_BY_CAMPAIGN), {'campaign_id': campaign_id}).fetchall()
@@ -245,8 +246,7 @@ def build_campaign_request_response(campaign_id, user):
 
     # get active pulls
     act_pulls = db.session.execute(
-        text(GET_ACTIVE_PULLS_BY_CAMPAIGN), {'campaign_id': campaign_id}
-    ).mappings().fetchall()
+        text(GET_ACTIVE_PULLS_BY_CAMPAIGN)).mappings().fetchall()
 
     active_pulls = []
     for r in act_pulls:
@@ -261,27 +261,12 @@ def build_campaign_request_response(campaign_id, user):
         })
 
     # Get the latest pull record to get current retrieval selections
-    latest_pull = db.session.execute(
-        text("""
-                SELECT householding, every_n, num_records 
-                FROM campaign_lists 
-                WHERE campaign_id = :campaign_id 
-                ORDER BY requested_at DESC LIMIT 1
-                """), {'campaign_id': campaign_id}
-    ).mappings().fetchone()
-    if latest_pull:
-        retrieval_selection = {
-            "householding": latest_pull['householding'],
-            "every_records": latest_pull['every_n'],
-            "pull_records": latest_pull['num_records']
-        }
-    else:
-        retrieval_selection = {
-            "householding": None,
-            "every_records": None,
-            "pull_records": None
-        }
-
+    latest_pull = db.session.execute(text(GET_LATEST_PULL_SETTINGS), {'campaign_id': campaign_id}).mappings().fetchone()
+    retrieval_selection = {
+        "householding": latest_pull['householding'] if latest_pull else None,
+        "every_records": latest_pull['every_n'] if latest_pull else None,
+        "pull_records": latest_pull['num_records'] if latest_pull else None
+    }
     return {
         "campaign": campaign,
         "list_title": list_title,
@@ -293,6 +278,73 @@ def build_campaign_request_response(campaign_id, user):
         "active_pulls": active_pulls
     }
 
+
+
+def _build_pull_response(rows):
+    pull_list = []
+    for row in rows:
+        row = dict(row)  # convert RowMapping to dict
+        pull_list.append({
+            "campaign": row.get("campaign"),
+            "list_title": row.get("name"),  # FIXED: was null because key was incorrect
+            "requested_by": row.get("requested_by"),
+            "time_requested": row.get("requested_at").strftime("%m/%d/%y %H:%M:%S") if row.get("requested_at") else None,
+            "time_completed": row.get("completed_at").strftime("%m/%d/%y %H:%M:%S") if row.get("completed_at") else "Pending"
+        })
+    return pull_list
+
+def insert_pull_list(args, current_user):
+    try:
+        campaign_id = args["campaign_id"]
+
+        campaign = db.session.execute(text(GET_CAMPAIGN_DETAILS_BY_ID), {'campaign_id': campaign_id}).fetchone()
+        if not campaign:
+            return {'error': 'Campaign not found'}, 404
+
+        campaign = dict(campaign._mapping)
+        print(current_user)
+
+        now = datetime.now().replace(microsecond=0)
+        day = now.day  # This gives day without leading zero on all platforms
+        list_title = f"{campaign['channel']} {campaign['name']} {now.strftime('%b')} {day}, {now.strftime('%Y %I:%M:%S%p').lower()}"
+
+        latest_pull = db.session.execute(text(GET_LATEST_PULL_SETTINGS), {'campaign_id': campaign_id}).mappings().fetchone()
+        latest_pull = latest_pull or {}
+        print(latest_pull)
+        payload = {
+            "campaign_id": campaign_id,
+            "requested_at": now,
+            "completed_at": None,
+            "fieldset_id": args.get("fieldset_id") or latest_pull.get("fieldset_id") or 1,
+            "every_n": args.get("every_n") or latest_pull.get("every_n") or 1,
+            "num_records": args.get("num_records") or latest_pull.get("num_records"),
+            "fields": args.get("fields") or latest_pull.get("fields") or "",
+            "requested_by": current_user['name'],
+            "excluded_pulls": args.get("excluded_pulls") or latest_pull.get("excluded_pulls") or "",
+            "householding": args.get("householding") or latest_pull.get("householding") or "",
+            "request_email": args.get("request_email") or latest_pull.get("request_email") or current_user["email"],
+            "criteria_sql": "",
+            "name": list_title
+        }
+        print(payload)
+
+        db.session.execute(text(INSERT_PULL_LIST), payload)
+        db.session.commit()
+
+
+        # return just inserted pull as active
+        rows = db.session.execute(text(GET_ACTIVE_PULLS_BY_CAMPAIGN)).mappings().fetchall()
+        return {"active_pulls": _build_pull_response(rows)}
+    except Exception as e:
+        db.session.rollback()
+        raise e
+
+def get_global_active_pulls():
+    try:
+        rows = db.session.execute(text(GET_ACTIVE_PULLS_BY_CAMPAIGN)).mappings().fetchall()
+        return {"active_pulls": _build_pull_response(rows)}
+    except Exception as e:
+        raise e
 
 
 

@@ -7,12 +7,14 @@ from flask import request, jsonify, current_app, g
 from sqlalchemy.exc import SQLAlchemyError
 
 from models.campaigns import get_campaign_details, soft_delete_campaign, get_campaigns, undelete_campaign, \
-    get_campaign_edit_data, add_criterion, add_campaign, get_dropdowns_for_datasources, build_campaign_request_response
+    get_campaign_edit_data, add_criterion, add_campaign, get_dropdowns_for_datasources, build_campaign_request_response, \
+    insert_pull_list, get_global_active_pulls
 from extensions import db
 from sqlalchemy import text
 
 from routes.campain_manager.dropdown_service import get_criteria_options
-from routes.campain_manager.schema import campaign_edit_response, criteria_model
+from routes.campain_manager.schema import campaign_edit_response, criteria_model,\
+    pull_item_model, active_pulls_response_model, pull_request_parser
 from utils.token import token_required
 
 # Define the namespace
@@ -310,6 +312,36 @@ class CampaignPullRequest(Resource):
             return {"error": "Internal server error"}, 500
 
 
+campaign_ns.models[pull_item_model.name] = pull_item_model
+campaign_ns.models[active_pulls_response_model.name] = active_pulls_response_model
 
+@campaign_ns.route("/pull")
+class PullInsert(Resource):
+    @token_required(current_app)
+    @campaign_ns.expect(pull_request_parser)
+    @campaign_ns.marshal_with(active_pulls_response_model)
+    def get(self):
+        args = pull_request_parser.parse_args()
+        try:
+            return insert_pull_list(args, g.current_user), 200
+        except ValueError as ve:
+            current_app.logger.warning(f"Validation error: {str(ve)}")
+            return {"error": str(ve)}, 400
+        except Exception as e:
+            current_app.logger.exception("Internal server error in pull insert")
+            return {"error": str(e)}, 500
 
+@campaign_ns.route("/pulls")
+class PullsAll(Resource):
+    @token_required(current_app)
+    @campaign_ns.marshal_with(active_pulls_response_model)
+    def get(self):
+        try:
+            return get_global_active_pulls(), 200
+        except ValueError as ve:
+            current_app.logger.warning(f"Validation error: {str(ve)}")
+            return {"error": str(ve)}, 400
+        except Exception as e:
+            current_app.logger.error(f"Internal server error in pull insert: {str(e)}")
+            return {"error": "Internal server error"}, 500
 

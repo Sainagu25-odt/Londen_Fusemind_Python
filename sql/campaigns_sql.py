@@ -222,7 +222,7 @@ WHERE token = :token
 """
 
 GET_CAMPAIGN_DETAILS_BY_ID = """
-SELECT id, name FROM campaigns WHERE id = :campaign_id
+SELECT id, name, channel FROM campaigns WHERE id = :campaign_id
 """
 
 
@@ -247,9 +247,34 @@ ORDER BY requested_at DESC
 """
 
 GET_ACTIVE_PULLS_BY_CAMPAIGN = """
-SELECT name, requested_at, requested_by, householding, every_n, num_records
+SELECT c.name AS campaign, cl.name,
+    cl.requested_by,
+    cl.requested_at,
+    cl.completed_at, cl.householding, cl.every_n, cl.num_records
+FROM campaign_lists cl
+JOIN campaigns c ON c.id = cl.campaign_id
+AND cl.completed_at IS NULL
+ORDER BY cl.requested_at DESC
+"""
+
+GET_LATEST_PULL_SETTINGS = """
+SELECT every_n, num_records, fields, fieldset_id,
+       excluded_pulls, householding, request_email
 FROM campaign_lists
 WHERE campaign_id = :campaign_id
-AND completed_at IS NULL
-ORDER BY requested_at DESC
+ORDER BY requested_at DESC LIMIT 1
+"""
+
+INSERT_PULL_LIST = """
+INSERT INTO campaign_lists (
+    campaign_id, requested_at, completed_at,
+    fieldset_id, every_n, num_records,
+    fields, requested_by, excluded_pulls,
+    householding, request_email, criteria_sql, name
+) VALUES (
+    :campaign_id, :requested_at, :completed_at,
+    :fieldset_id, :every_n, :num_records,
+    :fields, :requested_by, :excluded_pulls,
+    :householding, :request_email, :criteria_sql, :name
+)
 """
