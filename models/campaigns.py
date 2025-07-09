@@ -666,14 +666,12 @@ def get_campaign_record_data(campaign_id, page=1, limit=25):
 
     all_column_names = ', '.join([f"p.{row[0]}" for row in columns])
 
-    print(all_column_names)
 
     # If 'state' column exists, add join and computed column
     joins = ''
     if 'state' in column_names:
         joins += ' LEFT JOIN state_lookup ON (p.state = state_lookup.state_code) '
     #
-    print(joins)
     # Step 6: Where conditions (from campaign_criteria if needed)
     # Currently kept empty, can be built dynamically later
     where_conditions = ''
