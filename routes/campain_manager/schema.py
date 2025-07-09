@@ -61,3 +61,6 @@ CountResponseWrapper = api.model("CountResponseWrapper", {
     "total_count": fields.Integer
 })
 
+CampaignRecordResponse = api.model('CampaignRecordResponse', {
+    'data': fields.Raw
+})

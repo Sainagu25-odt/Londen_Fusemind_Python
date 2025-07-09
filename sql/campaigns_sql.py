@@ -500,3 +500,21 @@ SELECT name
 FROM campaign_lists
 WHERE id = :id
 """
+
+get_campaign_records_sql = '''
+SELECT {primary_key}, 
+       coalesce(state_name, state_code) AS state_code,
+       array_to_string (
+           ARRAY(
+               SELECT DISTINCT campaign_list_id 
+               FROM campaign_list_data AS d 
+               WHERE d.keyvalue = {pk_concat_sql}
+           ), ','
+       ) as lists
+FROM {table_name} AS p
+    {joins}
+WHERE TRUE
+    {where_conditions}
+ORDER BY {order_by}
+LIMIT {limit} OFFSET {offset}
+'''
