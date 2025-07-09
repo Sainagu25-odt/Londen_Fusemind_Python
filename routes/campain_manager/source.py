@@ -11,15 +11,15 @@ from werkzeug.exceptions import BadRequest
 
 from models.campaigns import get_campaign_details, soft_delete_campaign, get_campaigns, undelete_campaign, \
     get_campaign_edit_data, add_criterion, add_campaign, get_dropdowns_for_datasources, build_campaign_request_response, \
-    insert_pull_list, get_global_active_pulls, get_show_records, get_campaign_counts, get_global_campaign_counts, \
-    save_campaign_criteria, delete_criteria_row
+    insert_pull_list, get_global_active_pulls,  get_campaign_counts, get_global_campaign_counts, \
+    save_campaign_criteria, delete_criteria_row, get_campaign_record_data
 from extensions import db
 from sqlalchemy import text
 
 from routes.campain_manager.dropdown_service import get_criteria_options
 from routes.campain_manager.schema import campaign_edit_response, criteria_model, \
     pull_item_model, active_pulls_response_model, pull_request_parser, \
-    CountResponseWrapper, HouseholdResponse
+    CountResponseWrapper, HouseholdResponse, CampaignRecordResponse
 from sql.campaigns_sql import GET_CAMPAIGN_LIST_FILENAME
 from utils.token import token_required
 
@@ -439,12 +439,23 @@ class PullsAll(Resource):
             return {"error": "Internal server error"}, 500
 
 
+
+# to show records
 @campaign_ns.route('/<int:campaign_id>/records')
-class ShowRecords(Resource):
-    @campaign_ns.response(200, 'Success')
-    @campaign_ns.response(404, 'Not Found')
+@campaign_ns.response(404, 'Campaign not found')
+class CampaignRecords(Resource):
+    @campaign_ns.doc('get_campaign_records')
     def get(self, campaign_id):
-        records = get_show_records(campaign_id)
+        try:
+            page = int(request.args.get('page', 1))
+            limit = int(request.args.get('limit', 25))
+            result = get_campaign_record_data(campaign_id, page, limit)
+            if result is None:
+                return {"msg" : f"No records found for Campaign ID {campaign_id}"}
+            return {'data': result}, 200
+        except Exception as e:
+            return {"error": "Internal server error"}, 500
+
 
 # Schema for state-level counts
 state_count_model = campaign_ns.model("StateCount", {

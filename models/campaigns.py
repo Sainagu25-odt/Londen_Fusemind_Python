@@ -1,4 +1,5 @@
 import os
+from decimal import Decimal
 
 from flask import abort, current_app
 from sqlalchemy import text, inspect
@@ -12,7 +13,7 @@ from sql.campaigns_sql import counts_sql_template, states_sql_template, soft_del
     INSERT_PULL_LIST, GET_ALL_CAMPAIGNS_SQL, \
     get_show_records_sql, get_records
 
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, date
 
 import sql.campaigns_sql as q
 
@@ -590,53 +591,122 @@ def get_table_columns(table_name):
     result = db.session.execute(text(sql), {'tname': table_name}).fetchall()
     return {row[0] for row in result}
 
-def get_show_records(campaign_id):
-    # 1. Get datasource name from campaign
-    campaign_sql = text("SELECT datasource FROM campaigns WHERE id = :cid")
-    campaign_result = db.session.execute(campaign_sql, {'cid': campaign_id}).fetchone()
-    if not campaign_result or not campaign_result.datasource:
-        raise Exception("Invalid campaign_id or missing datasource")
+# show records
 
-    datasource = campaign_result.datasource
-    existing_columns = get_table_columns(datasource)
+def serialize_record(record):
+    def convert_value(value):
+        if isinstance(value, (datetime, date)):
+            return value.isoformat()
+        elif isinstance(value, Decimal):
+            return float(value)
+        return value
 
-    # 2. Build SELECT clause
-    select_parts = []
-    for col in EXPECTED_COLUMNS:
-        label = to_label(col)
-        if col == "state":
-            select_parts.append(f"COALESCE(state_lookup.state_name, p.state) AS \"State Code\"")
-        elif col in existing_columns:
-            select_parts.append(f"COALESCE(p.{col}, '') AS \"{label}\"")
-        else:
-            select_parts.append(f"'' AS \"{label}\"")
-    select_clause = ",\n".join(select_parts)
+    return {k: convert_value(v) for k, v in record.items()}
 
-    # 3. Determine ORDER BY clause
-    if "policy" in existing_columns:
-        order_clause = "ORDER BY p.policy DESC"
-    else:
-        fallback_col = next(iter(existing_columns), None)
-        order_clause = f"ORDER BY p.{fallback_col} DESC" if fallback_col else ""
+def get_campaign_record_data(campaign_id, page=1, limit=25):
 
-    # 4. Final SQL with JOIN on campaign_list_data
-    sql = f"""
-        SELECT
-            {select_clause}
-        FROM {datasource} p
-        JOIN campaign_list_data cld
-          ON p.policy = cld.policy_number AND p.company_number = cld.company_number
-        LEFT JOIN state_lookup ON p.state = state_lookup.state_code
-        WHERE cld.campaign_id = :campaign_id
-        {order_clause}
-        LIMIT 100
-    """
-
-    rows = db.session.execute(text(sql), {'campaign_id': campaign_id}).mappings().all()
-    data = [dict(row) for row in rows]
-    print(data)
+    offset = (page - 1) * limit
 
 
+    # Step 1: Get campaign and datasource info
+    campaign_info = db.session.execute(text("""
+        SELECT c.id, c.datasource, d.tablename
+        FROM campaigns c
+        JOIN campaign_datasources d ON c.datasource = d.datasource
+        WHERE c.id = :campaign_id
+    """), {'campaign_id': campaign_id}).fetchone()
+
+
+    if not campaign_info:
+        return None
+
+    table_name = campaign_info.tablename
+    #
+    # Step 2: Get primary key fields
+    primary_keys = db.session.execute(text("""
+        SELECT column_name
+        FROM information_schema.table_constraints tc
+        JOIN information_schema.constraint_column_usage AS ccu
+            ON ccu.constraint_name = tc.constraint_name
+        WHERE tc.constraint_type = 'PRIMARY KEY'
+          AND tc.table_name = :table
+        ORDER BY column_name
+    """), {'table': table_name}).fetchall()
+    #
+    primary_key_fields = [f"p.{row[0]}" for row in primary_keys]
+    primary_key = ', '.join(primary_key_fields)
+    pk_concat_sql = "||','||".join([f"p.{row[0]}::text" for row in primary_keys])
+    #
+
+    # # Step 3: Get household fields
+    household_columns = db.session.execute(text("""
+        SELECT column_name FROM campaign_datasource_household h
+        JOIN campaign_datasources d ON h.datasource = d.datasource
+        WHERE d.datasource = :datasource_id
+    """), {'datasource_id': campaign_info.datasource}).fetchall()
+
+
+    household_fields = ', '.join([f"p.{row[0]}" for row in household_columns]) or 'NULL'
+
+    #
+    # Step 4: Get order_by column (if not in schema use fallback)
+    order_by_row = db.session.execute(text("""
+        SELECT order_by FROM campaign_datasources WHERE datasource = :datasource
+    """), {'datasource': campaign_info.datasource}).fetchone()
+    order_by = order_by_row[0] if order_by_row and order_by_row[0] else "p.id"
+    print(order_by)
+    #
+    # Step 5: Joins — always join state_lookup if 'state' exists
+    columns = db.session.execute(text("""
+        SELECT column_name FROM information_schema.columns
+        WHERE table_name = :table
+    """), {'table': table_name}).fetchall()
+
+    column_names = [row[0] for row in columns]
+
+    all_column_names = ', '.join([f"p.{row[0]}" for row in columns])
+
+    print(all_column_names)
+
+    # If 'state' column exists, add join and computed column
+    joins = ''
+    if 'state' in column_names:
+        joins += ' LEFT JOIN state_lookup ON (p.state = state_lookup.state_code) '
+    #
+    print(joins)
+    # Step 6: Where conditions (from campaign_criteria if needed)
+    # Currently kept empty, can be built dynamically later
+    where_conditions = ''
+    #
+    # Step 7: Final SQL
+    final_sql = q.get_campaign_records_sql.format(
+        primary_key=all_column_names,
+        pk_concat_sql=pk_concat_sql,
+        table_name=table_name,
+        joins=joins,
+        where_conditions=where_conditions,
+        order_by=order_by,
+        limit = limit,
+        offset = offset
+    )
+
+    #
+    result = db.session.execute(text(final_sql))
+    columns = result.keys()  # Get all column names
+
+    # Convert each row to a dictionary using column names
+    records = [dict(zip(columns, row)) for row in result.fetchall()]
+    serialized_data = [serialize_record(row) for row in records]
+    return serialized_data
+
+
+
+
+
+
+
+
+# counts
 def build_exclude(excludes):
     if not excludes:
         return ''
@@ -697,6 +767,8 @@ def get_global_campaign_counts():
         })
 
     return result
+
+#pull lists
 
 def get_pull_file_path(pull_id):
     try:
