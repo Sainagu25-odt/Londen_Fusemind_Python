@@ -1,20 +1,26 @@
 import logging
+import os
+import re
 from logging import exception
 
 from flask_restx import Namespace, Resource, fields, reqparse
 
-from flask import request, jsonify, current_app, g
+from flask import request, jsonify, current_app, g, send_file
 from sqlalchemy.exc import SQLAlchemyError
+from werkzeug.exceptions import BadRequest
 
 from models.campaigns import get_campaign_details, soft_delete_campaign, get_campaigns, undelete_campaign, \
     get_campaign_edit_data, add_criterion, add_campaign, get_dropdowns_for_datasources, build_campaign_request_response, \
-    insert_pull_list, get_global_active_pulls
+    insert_pull_list, get_global_active_pulls, get_show_records, get_campaign_counts, get_global_campaign_counts, \
+    save_campaign_criteria, delete_criteria_row
 from extensions import db
 from sqlalchemy import text
 
 from routes.campain_manager.dropdown_service import get_criteria_options
-from routes.campain_manager.schema import campaign_edit_response, criteria_model,\
-    pull_item_model, active_pulls_response_model, pull_request_parser
+from routes.campain_manager.schema import campaign_edit_response, criteria_model, \
+    pull_item_model, active_pulls_response_model, pull_request_parser, \
+    CountResponseWrapper, HouseholdResponse
+from sql.campaigns_sql import GET_CAMPAIGN_LIST_FILENAME
 from utils.token import token_required
 
 # Define the namespace
@@ -23,12 +29,16 @@ campaign_ns = Namespace('campaigns', description='Campaign related operations')
 
 # ✅ Boolean parser
 def str_to_bool(value):
-    return str(value).lower() in ['true', '1', 'yes']
+    if isinstance(value, bool):
+        return value
+    if isinstance(value, str):
+        return value.lower() in ['true', '1', 'yes']
+    return False
 
 # Request Query Parameters
 campaign_parser = reqparse.RequestParser()
-campaign_parser.add_argument('include_deleted', type=str_to_bool, default=False, help='Include deleted campaigns')
-campaign_parser.add_argument('show_counts', type=str_to_bool, default=False, help='Show counts in response')
+campaign_parser.add_argument('include_deleted', type=str_to_bool, default=False, help='Include deleted campaigns', location='args')
+campaign_parser.add_argument('show_counts', type=str_to_bool, default=False, help='Show counts in response', location='args')
 
 
 # response params
@@ -55,6 +65,7 @@ class CampaignList(Resource):
         try:
             args = campaign_parser.parse_args()
             include_deleted = args.get('include_deleted', False)
+            print(include_deleted)
             response = get_campaigns(include_deleted)
             return response, 200
         except exception as e:
@@ -174,36 +185,79 @@ class DeleteCampaign(Resource):
 
 
 
+# Request parser
 edit_parser = reqparse.RequestParser()
-edit_parser.add_argument('show_counts', type=int, default=0)
+edit_parser.add_argument("show_counts", type=int, default=0)
 
-criteria_field = campaign_ns.model('Criterion', {
-    'column_name': fields.String,
-    'operator': fields.String,
-    'value': fields.String,
-    'is_or': fields.Boolean
+# Criteria model
+criteria_field = campaign_ns.model("Criterion", {
+    "row_id": fields.Integer,
+    "column_name": fields.String,
+    "operator": fields.String,
+    "value": fields.String,
+    "is_or": fields.Boolean
 })
 
-edit_response = campaign_ns.model('EditCampaignResponse', {
-    'id': fields.Integer,
-    'name': fields.String,
-    'description': fields.String,
-    'channel': fields.String,
-    'deleted': fields.Boolean,
-    'datasource_table': fields.String,
-    'criteria': fields.List(fields.Nested(criteria_field)),
-    'counts': fields.Integer(required=False)
+# Subquery join info
+subquery_join_model = campaign_ns.model("SubqueryJoin", {
+    "label": fields.String,
+    "parent_table": fields.String,
+    "child_table": fields.String,
+    "parent_field": fields.String,
+    "child_field": fields.String
 })
 
-@campaign_ns.route('/<int:campaign_id>/edit')
-@campaign_ns.doc(params={'show_counts': 'Set to 1 to include counts'})
+# Subquery model
+subquery_model = campaign_ns.model("Subquery", {
+    "id": fields.Integer,
+    "name": fields.String,
+    "begin_date": fields.String,
+    "deleted": fields.Boolean,
+    "criteria": fields.List(fields.Nested(criteria_field)),
+    "join": fields.Nested(subquery_join_model)
+})
+
+# Final edit response
+edit_response = campaign_ns.model("EditCampaignResponse", {
+    "id": fields.Integer,
+    "name": fields.String,
+    "description": fields.String,
+    "channel": fields.String,
+    "begin_date": fields.String,
+    "deleted": fields.Boolean,
+    "datasource_table": fields.String,
+    "criteria": fields.List(fields.Nested(criteria_field)),
+    "subqueries": fields.List(fields.Nested(subquery_model)),
+    "counts": fields.Integer
+})
+
+
+@campaign_ns.route("/<int:campaign_id>/edit")
+@campaign_ns.doc(params={"show_counts": "Set to 1 to include counts"})
 class EditCampaign(Resource):
     @token_required(current_app)
     @campaign_ns.expect(edit_parser)
     @campaign_ns.marshal_with(edit_response)
     def get(self, campaign_id):
         args = edit_parser.parse_args()
-        return get_campaign_edit_data(campaign_id, args['show_counts'])
+        try:
+            return get_campaign_edit_data(campaign_id, args["show_counts"])
+        except Exception as e:
+            current_app.logger.error(f"EditCampaign failed: {e}")
+            return {"message": "Failed to retrieve campaign"}, 500
+
+# @campaign_ns.route('/<int:campaign_id>/edit')
+# @campaign_ns.doc(params={'show_counts': 'Set to 1 to include counts'})
+# class EditCampaign(Resource):
+#     @token_required(current_app)
+#     @campaign_ns.expect(edit_parser)
+#     @campaign_ns.marshal_with(edit_response)
+#     def get(self, campaign_id):
+#         args = edit_parser.parse_args()
+#         return get_campaign_edit_data(campaign_id, args['show_counts'])
+
+
+
 
 add_crit_model = campaign_ns.model('NewCriterion', {
     "column_name": fields.String(required=True),
@@ -211,6 +265,47 @@ add_crit_model = campaign_ns.model('NewCriterion', {
     "sql_value": fields.String(required=True),
     "or_next": fields.Boolean(required=False, default=False),
 })
+
+@campaign_ns.route('/<int:campaign_id>/save')
+class SaveCampaign(Resource):
+    @token_required(current_app)
+    def post(self, campaign_id):
+        try:
+            data = request.get_json()
+            criteria_list = data.get("criteria", [])
+
+            if not isinstance(criteria_list, list):
+                return {"message": "Invalid data format for criteria"}, 400
+            print(criteria_list)
+
+            save_campaign_criteria(campaign_id, criteria_list)
+            db.session.commit()
+            return {"message": "Campaign criteria saved successfully"}, 200
+
+        except SQLAlchemyError as e:
+            db.session.rollback()
+            return {"message": "Database error", "error": str(e)}, 500
+
+        except Exception as e:
+            db.session.rollback()
+            return {"message": "Unexpected error", "error": str(e)}, 500
+
+@campaign_ns.route('/<int:campaign_id>/deleteCriteria/<int:row_id>')
+class DeleteCriterion(Resource):
+    @token_required(current_app)
+    def get(self, campaign_id, row_id):
+        try:
+            delete_criteria_row(campaign_id, row_id)
+            db.session.commit()
+            return {"message": f"Criterion row {row_id} deleted successfully"}, 200
+
+        except SQLAlchemyError as e:
+            db.session.rollback()
+            return {"message": "Database error", "error": str(e)}, 500
+
+        except Exception as e:
+            db.session.rollback()
+            return {"message": "Unexpected error", "error": str(e)}, 500
 
 @campaign_ns.route('/<int:campaign_id>/newCriteria')
 class AddCriterion(Resource):
@@ -287,11 +382,9 @@ class CriteriaOptions(Resource):
             return {"error": f"Failed to load criteria options: {str(e)}"}, 500
 
 
-
-
-
 @campaign_ns.route("/form-dropdowns")
 class CampaignFormDropdowns(Resource):
+    @campaign_ns.doc(False)  # Hide from Swagger UI
     def get(self):
         try:
             result = get_dropdowns_for_datasources()
@@ -344,4 +437,114 @@ class PullsAll(Resource):
         except Exception as e:
             current_app.logger.error(f"Internal server error in pull insert: {str(e)}")
             return {"error": "Internal server error"}, 500
+
+
+@campaign_ns.route('/<int:campaign_id>/records')
+class ShowRecords(Resource):
+    @campaign_ns.response(200, 'Success')
+    @campaign_ns.response(404, 'Not Found')
+    def get(self, campaign_id):
+        records = get_show_records(campaign_id)
+
+# Schema for state-level counts
+state_count_model = campaign_ns.model("StateCount", {
+    "state": fields.String(description="State name"),
+    "total": fields.Integer(description="Total count for the state")
+})
+
+# Schema for total household counts
+household_model = campaign_ns.model("HouseholdCount", {
+    "total_households": fields.Integer(description="Total households"),
+    "total_duplicates": fields.Integer(description="Total duplicates")
+})
+
+# Schema for the full campaign count response
+campaign_count_response = campaign_ns.model("CampaignCountResponse", {
+    "state_counts": fields.List(fields.Nested(state_count_model)),
+    "total_count": fields.Integer(description="Total records count"),
+    "total_households": fields.Integer(description="Total households"),
+    "total_duplicates": fields.Integer(description="Total duplicates")
+})
+
+# Schema for global campaign counts
+global_count_model = campaign_ns.model("GlobalCount", {
+    "campaign_id": fields.Integer(description="Campaign ID"),
+    "total": fields.Integer(description="Total count for campaign")
+})
+
+# Parser for /<campaign_id>/counts
+campaign_parser = reqparse.RequestParser()
+campaign_parser.add_argument('household', type=bool, location='args', required=False, help='Group by household')
+campaign_parser.add_argument('excludes', type=str, location='args', required=False, help='Comma separated list of excludes')
+
+@campaign_ns.route('/<int:campaign_id>/counts')
+class CampaignCounts(Resource):
+    @campaign_ns.expect(campaign_parser)
+    @campaign_ns.marshal_with(campaign_count_response)
+    def get(self, campaign_id):
+        args = campaign_parser.parse_args()
+        household = args.get('household', False)
+        excludes = args.get('excludes')
+        return get_campaign_counts(campaign_id, household, excludes)
+
+
+@campaign_ns.route('/counts')
+class GlobalCampaignCounts(Resource):
+    @campaign_ns.marshal_list_with(global_count_model)
+    def get(self):
+        show_counts = request.args.get('show_counts')
+        if show_counts != '1':
+            return []
+        return get_global_campaign_counts()
+
+
+
+
+@campaign_ns.route("/pull/<int:id>/download")
+class DownloadPullFile(Resource):
+    @token_required(current_app)
+    def get(self, id):
+        try:
+            # Fetch filename from DB
+            row = db.session.execute(text(GET_CAMPAIGN_LIST_FILENAME), {"id": id}).mappings().first()
+            if not row:
+                return {"message": "Campaign list not found"}, 404
+
+            original_filename = row["file_name"]
+            print(original_filename)
+            current_app.logger.info(f"Original filename from DB: {original_filename}")
+
+            # Sanitize filename
+            sanitized_filename = re.sub(r"[ ,:]", "", original_filename)
+            print(sanitized_filename)
+            current_app.logger.info(f"Sanitized filename: {sanitized_filename}")
+
+            # Ensure 'lists' folder exists, create if missing
+            lists_folder = os.path.join(current_app.root_path, "lists")
+            print(lists_folder)
+            if not os.path.exists(lists_folder):
+                os.makedirs(lists_folder)
+                current_app.logger.info(f"Created missing folder: {lists_folder}")
+
+            # Full path for the zip file
+            file_path = os.path.join(lists_folder, f"{sanitized_filename}.zip")
+            print(file_path)
+            current_app.logger.info(f"Full file path: {file_path}")
+
+            # If file does not exist, create an empty placeholder zip file
+            if not os.path.exists(file_path):
+                with open(file_path, "wb") as f:
+                    pass  # creates an empty file
+                current_app.logger.info(f"Created placeholder file: {file_path}")
+
+            # Now send the file
+            return send_file(file_path, as_attachment=True)
+
+        except Exception as e:
+            current_app.logger.error(f"DownloadPullFile failed: {e}")
+            return {"message": "Download failed"}, 500
+
+
+
+
 
