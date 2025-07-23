@@ -12,6 +12,16 @@ campaign_response = Model('CampaignResponse', {
      'campaign_subquery_id': fields.Integer
 })
 
+#counts response fields
+counts_response = Model('CountsResponse', {
+    "campaign_name": fields.String,
+    "channel": fields.String,
+    'counts': fields.Integer,
+    'universe': fields.Integer,
+    'states': fields.List(fields.Raw),
+    "previous_pulls": fields.List(fields.Raw)
+})
+
 
 criteria_model = Model('Criterion', {
     'column_name': fields.String,

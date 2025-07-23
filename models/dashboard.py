@@ -1,10 +1,6 @@
 from sqlalchemy import text
-
 from extensions import db
-
 import sql.dashboard_sql as q
-
-
 
 def get_dashboard_stats():
     policy_holders = db.session.execute(text(q.GET_POLICY_HOLDERS)).scalar()
