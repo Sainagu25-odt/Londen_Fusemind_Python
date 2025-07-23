@@ -206,54 +206,21 @@ WHERE id = :campaign_id
   AND campaign_subquery_id IS NULL;
 """
 
+## global counts
+SQL_TOTAL_COUNTS = """
+SELECT count(*) AS total
+FROM {table_name} p
+WHERE TRUE {exclude}
+"""
 
-
-
-
-# # queries/campaign_queries.py
-# GET_CAMPAIGN_TABLE = """
-# SELECT c.name, c.channel, ds.tablename
-# FROM campaigns c
-# JOIN campaign_datasources ds ON c.datasource = ds.datasource
-# WHERE c.id = :campaign_id
-# """
-
-# GET_HOUSEHOLD_FIELDS = """
-# SELECT string_agg(column_name, ',') AS hf
-# FROM campaign_datasource_household
-# WHERE datasource = (
-#     SELECT datasource FROM campaigns WHERE id = :campaign_id
-# )
-# """
-
-# SQL_COUNTS_BY_STATE = """
-# SELECT coalesce(sl.state_name, p.state) AS state, count(*) AS total
-# FROM {table_name} p
-# LEFT JOIN state_lookup sl ON p.state = sl.state_code
-# WHERE TRUE {exclude}
-# GROUP BY coalesce(sl.state_name, p.state)
-# ORDER BY state
-# """
-
-# SQL_TOTAL_COUNTS = """
-# SELECT count(*) AS total
-# FROM {table_name} p
-# WHERE TRUE {exclude}
-# """
-
-# SQL_HOUSEHOLD_COUNTS = """
-# SELECT count(*) AS total_households, sum(cnt) AS total_dups
-# FROM (
-#   SELECT {fields}, coalesce(sl.state_name, p.state) AS state_code, count(*) AS cnt
-#   FROM {table_name} p
-#   LEFT JOIN state_lookup sl ON p.state = sl.state_code
-#   WHERE TRUE {exclude}
-#   GROUP BY {fields}, coalesce(sl.state_name, p.state)
-# ) AS s
-# """
+SQL_GLOBAL_CAMPAIGNS = """
+SELECT c.id, ds.tablename
+FROM campaigns c
+JOIN campaign_datasources ds ON c.datasource = ds.datasource
+WHERE c.deleted_at IS NULL AND c.campaign_subquery_id IS NULL
+"""
 
 ## counts by each campaign sql queries
-
 GET_CAMPAIGN_DATASOURCE_INFO_SQL = """
 SELECT 
     c.name,
@@ -338,17 +305,6 @@ ORDER BY 1
 """
 
 
-
-
-
-
-
-SQL_GLOBAL_CAMPAIGNS = """
-SELECT c.id, ds.tablename
-FROM campaigns c
-JOIN campaign_datasources ds ON c.datasource = ds.datasource
-WHERE c.deleted_at IS NULL AND c.campaign_subquery_id IS NULL
-"""
 
 GET_CAMPAIGN_LIST_FILENAME = """
 SELECT name

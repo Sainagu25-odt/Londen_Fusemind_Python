@@ -424,65 +424,11 @@ def get_campaign_record_data(campaign_id, page=1, limit=25):
     serialized_data = [serialize_record(row) for row in records]
     return serialized_data
 
-# counts
-# def build_exclude(excludes):
-#     if not excludes:
-#         return ''
-#     clauses = [f"AND {e.strip()}" for e in excludes.split(',') if e.strip()]
-#     return ' '.join(clauses)
 
-# def get_campaign_counts(campaign_id, household=False, excludes=None):
-#     row = db.session.execute(text(q.GET_CAMPAIGN_TABLE), {"campaign_id": campaign_id}).first()
-#     if not row:
-#         raise ValueError("Campaign not found")
-#     table = row.tablename
-#     exclude = build_exclude(excludes)
-#
-#     if household:
-#         hf_row = db.session.execute(text(q.GET_HOUSEHOLD_FIELDS), {"campaign_id": campaign_id}).first()
-#         if not hf_row or not hf_row.hf:
-#             raise ValueError("No household fields defined")
-#         fields = hf_row.hf
-#
-#         sql = q.SQL_HOUSEHOLD_COUNTS.format(table_name=table, fields=fields, exclude=exclude)
-#         h = db.session.execute(text(sql)).first()
-#
-#         # Fetch previous pulls
-#         previous_pulls = get_previous_pulls(campaign_id)
-#
-#         return {
-#             "campaign_name": row.name,
-#             "channel": row.channel,
-#             "state_counts": None,
-#             "total_count": None,
-#             "total_households": int(h.total_households or 0),
-#             "total_duplicates": int(h.total_dups or 0),
-#             "previous_pulls": previous_pulls
-#         }
-#
-#     state_sql = q.SQL_COUNTS_BY_STATE.format(table_name=table, exclude=exclude)
-#     rows = db.session.execute(text(state_sql)).fetchall()
-#
-#     total_sql = q.SQL_TOTAL_COUNTS.format(table_name=table, exclude=exclude)
-#     total = db.session.execute(text(total_sql)).scalar()
-#
-#     previous_pulls = get_previous_pulls(campaign_id)
-#
-#     return {
-#         "campaign_name": row.name,
-#         "channel": row.channel,
-#         "state_counts": [{"state": r.state, "total": int(r.total)} for r in rows],
-#         "total_count": int(total or 0),
-#         "total_households": 0,
-#         "total_duplicates": 0,
-#         "previous_pulls": previous_pulls
-#     }
 
 def get_campaign_datasource_info(campaign_id):
     sql = text(q.GET_CAMPAIGN_DATASOURCE_INFO_SQL)
-    print(sql)
     result = db.session.execute(sql, {"campaign_id": campaign_id}).mappings().first()
-    print(result)
     if not result:
         raise ValueError(f"No datasource found for campaign_id {campaign_id}")
     return result
@@ -558,7 +504,6 @@ def get_campaign_counts(campaign_id, exclude=None, household=False):
     counts = db.session.execute(text(counts_sql)).scalar()
     universe = db.session.execute(text(universe_sql)).scalar()
     states_rows = db.session.execute(text(states_sql)).fetchall()
-
     def clean_row(row):
         return {
             k: int(v) if isinstance(v, Decimal) else v
@@ -566,8 +511,6 @@ def get_campaign_counts(campaign_id, exclude=None, household=False):
         }
 
     states = [clean_row(row) for row in states_rows]
-    # states = [dict(row._mapping) for row in states_rows]
-
     previous_pulls = get_previous_pulls(campaign_id)
     return {
         "campaign_name" : datasource_info['name'],

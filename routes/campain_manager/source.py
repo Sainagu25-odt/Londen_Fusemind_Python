@@ -17,7 +17,7 @@ from sqlalchemy import text
 from routes.campain_manager.dropdown_service import get_criteria_options
 from routes.campain_manager.schema import campaign_edit_response, criteria_model, \
     pull_item_model, active_pulls_response_model, pull_request_parser, \
-     campaign_response
+     campaign_response, counts_response
 from sql.campaigns_sql import GET_CAMPAIGN_LIST_FILENAME
 from utils.token import token_required
 
@@ -28,7 +28,7 @@ campaign_ns = Namespace('campaigns', description='Campaign related operations')
 campaign_ns.models[campaign_response.name] = campaign_response
 @campaign_ns.route('')
 class CampaignList(Resource):
-    # @token_required(current_app)
+    @token_required(current_app)
     @campaign_ns.doc(params={'include_deleted': 'Set to true to include deleted campaigns'})
     @campaign_ns.marshal_list_with(campaign_response)
     def get(self):
@@ -332,73 +332,17 @@ class CampaignRecords(Resource):
         except Exception as e:
             return {"error": "Internal server error"}, 500
 
-
-#counts
-
-# # Schema for state-level counts
-# state_count_model = campaign_ns.model("StateCount", {
-#     "state": fields.String(description="State name"),
-#     "total": fields.Integer(description="Total count for the state")
-# })
-#
-# # Schema for total household counts
-# household_model = campaign_ns.model("HouseholdCount", {
-#     "total_households": fields.Integer(description="Total households"),
-#     "total_duplicates": fields.Integer(description="Total duplicates")
-# })
-#
-# # Schema for the full campaign count response
-# campaign_count_response = campaign_ns.model("CampaignCountResponse", {
-#     "campaign_name": fields.String(description="Campaign Name"),
-#     "channel": fields.String(description="Campaign Channel"),
-#     "state_counts": fields.List(fields.Nested(state_count_model)),
-#     "total_count": fields.Integer(description="Total records count"),
-#     "total_households": fields.Integer(description="Total households"),
-#     "total_duplicates": fields.Integer(description="Total duplicates"),
-#     "previous_pulls": fields.List(fields.Raw, description="Previous pull history")  # generic list of dicts
-#
-# })
-#
 # Schema for global campaign counts
 global_count_model = campaign_ns.model("GlobalCount", {
     "campaign_id": fields.Integer(description="Campaign ID"),
     "total": fields.Integer(description="Total count for campaign")
 })
-#
-# # Parser for /<campaign_id>/counts
-# campaign_parser = reqparse.RequestParser()
-# campaign_parser.add_argument('household', type=bool, location='args', required=False, help='Group by household')
-# campaign_parser.add_argument('excludes', type=str, location='args', required=False, help='Comma separated list of excludes')
-#
-# @campaign_ns.route('/<int:campaign_id>/counts')
-# class CampaignCounts(Resource):
-#     # @token_required(current_app)
-#     @campaign_ns.expect(campaign_parser)
-#     @campaign_ns.marshal_with(campaign_count_response)
-#     def get(self, campaign_id):
-#         try:
-#             args = campaign_parser.parse_args()
-#             household = args.get('household', False)
-#             excludes = args.get('excludes')
-#             response = get_campaign_counts(campaign_id, household, excludes)
-#             return response, 200
-#         except Exception as e:
-#             return {"error" : str(e)}, 500
 
 # counts for each campaign_id
-counts_response = campaign_ns.model('CountsResponse', {
-    "campaign_name": fields.String(description="Campaign Name"),
-    "channel": fields.String(description="Campaign Channel"),
-    'counts': fields.Integer(required=True, description='Total counts'),
-    'universe': fields.Integer(required=True, description='Universe count'),
-    'states': fields.List(fields.Raw, description='Counts by state'),
-    "previous_pulls": fields.List(fields.Raw, description="Previous pull history")  # generic list of dicts
-
-
-})
-
+campaign_ns.models[counts_response.name] = counts_response
 @campaign_ns.route('/<int:campaign_id>/counts')
 class CountsResource(Resource):
+    @token_required(current_app)
     @campaign_ns.doc(params={
         'exclude': 'Comma-separated list of campaign_list IDs to exclude',
         'household': 'Boolean flag to get household counts (true/false)'
@@ -408,9 +352,6 @@ class CountsResource(Resource):
         exclude = request.args.get('exclude')
         household = request.args.get('household', 'false').lower() == 'true'
         try:
-            print(campaign_id)
-            print(exclude)
-            print(household)
             data = get_campaign_counts(campaign_id, exclude, household)
             return data, 200
         except SQLAlchemyError as e:
@@ -418,22 +359,18 @@ class CountsResource(Resource):
         except Exception as e:
             return {"error" : str(e)}, 500
 
-
-
-
-
-
-
-
 @campaign_ns.route('/counts')
 class GlobalCampaignCounts(Resource):
     @token_required(current_app)
     @campaign_ns.marshal_list_with(global_count_model)
     def get(self):
-        show_counts = request.args.get('show_counts')
-        if show_counts != '1':
-            return []
-        return get_global_campaign_counts()
+        try:
+            show_counts = request.args.get('show_counts')
+            if show_counts != '1':
+                return []
+            return get_global_campaign_counts(), 200
+        except Exception as e:
+            return {"error" : str(e)}, 500
 
 
 
@@ -480,7 +417,6 @@ class DownloadPullFile(Resource):
 
 
 # copy campaign
-
 @campaign_ns.route('/<int:campaign_id>/copy')
 @campaign_ns.response(404, 'Campaign not found')
 class CampaignCopy(Resource):
