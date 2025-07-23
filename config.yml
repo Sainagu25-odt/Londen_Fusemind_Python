@@ -7,3 +7,10 @@ database:
 
 app:
   secret_key: your_secret_key_here
+
+ftp:
+  hostname: localhost
+  port: 22
+  username: sai nagu
+  password: Sai_Nagu@25794
+  remote_dir: /var/ftp/secure/londen-policy/Campaign_Manager

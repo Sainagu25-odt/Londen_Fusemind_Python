@@ -2,6 +2,17 @@ from flask_restx import fields, Model, reqparse
 
 from extensions import api
 
+campaign_response = Model('CampaignResponse', {
+    'id': fields.Integer,
+     'name': fields.String,
+     'description': fields.String,
+     'begin_date': fields.String,
+     'channel': fields.String,
+     'deleted_at': fields.String,
+     'campaign_subquery_id': fields.Integer
+})
+
+
 criteria_model = Model('Criterion', {
     'column_name': fields.String,
     'operator': fields.String,
@@ -46,21 +57,3 @@ active_pulls_response_model = Model("ActivePullsResponse", {
 
 
 
-CountResponseItem = api.model("CountResponseItem", {
-    "state": fields.String(required=True, description="State name"),
-    "total": fields.Integer(required=True, description="Total count in state")
-})
-
-HouseholdResponse = api.model("HouseholdResponse", {
-    "total_households": fields.Integer,
-    "total_duplicates": fields.Integer
-})
-
-CountResponseWrapper = api.model("CountResponseWrapper", {
-    "state_counts": fields.List(fields.Nested(CountResponseItem)),
-    "total_count": fields.Integer
-})
-
-CampaignRecordResponse = api.model('CampaignRecordResponse', {
-    'data': fields.Raw
-})
