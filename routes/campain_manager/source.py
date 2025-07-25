@@ -30,7 +30,7 @@ campaign_ns.models[campaign_response.name] = campaign_response
 class CampaignList(Resource):
     @token_required(current_app)
     @campaign_ns.doc(params={'include_deleted': 'Set to true to include deleted campaigns'})
-    @campaign_ns.marshal_list_with(campaign_response)
+    @campaign_ns.marshal_with(campaign_response)
     def get(self):
         try:
             include_deleted = request.args.get('include_deleted', 'false').lower() == 'true'

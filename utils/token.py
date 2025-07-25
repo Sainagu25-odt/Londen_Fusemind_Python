@@ -7,14 +7,15 @@ from flask import current_app, jsonify, request,make_response, g
 from models.user import find_user_by_username
 
 
-def generate_token( user):
+def generate_token(user, permissions):
     payload = {
-        'name': user["name"],
-        'exp': datetime.utcnow() + timedelta(hours=30)
+        "name": user["name"],
+        "permissions": permissions,
+        "exp": datetime.utcnow() + timedelta(hours=30)
     }
     return jwt.encode(payload, current_app.config['SECRET_KEY'], algorithm="HS256")
 
-def decode_token( token):
+def decode_token(token):
     try:
         return jwt.decode(token, current_app.config['SECRET_KEY'], algorithms=["HS256"])
     except jwt.ExpiredSignatureError:
@@ -48,6 +49,7 @@ def token_required(app):
 
                 # Store user for app-wide access
                 g.current_user = current_user
+                g.permissions = data.get("permissions", [])
 
             except jwt.ExpiredSignatureError:
                 return {'error': 'Token has expired!'}, 401
@@ -57,6 +59,7 @@ def token_required(app):
             # Step 3: Create new token (after validation success)
             new_payload = {
                 'name': current_user['name'],
+                'permissions': g.permissions,  # ✅ Include permissions again
                 'exp': datetime.utcnow() + timedelta(minutes=5)  # expires in 1 min
             }
             new_token = jwt.encode(new_payload, app.config['SECRET_KEY'], algorithm="HS256")

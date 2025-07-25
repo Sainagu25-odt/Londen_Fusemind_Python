@@ -3,7 +3,7 @@ from flask_restx import Namespace, Resource, fields
 from flask import request, jsonify, current_app
 import hashlib, jwt, datetime
 
-from models.user import find_user_by_username
+from models.user import find_user_by_username, get_permissions_by_username
 from utils.token import generate_token,token_required
 
 auth_ns = Namespace('auth', description='Authentication APIs')
@@ -31,7 +31,8 @@ class Login(Resource):
             # assuming password is stored as sha256 hash
             hashed_password = hashlib.md5(password.encode()).hexdigest()
             if hashed_password == user['password']:
-                token = generate_token(user)
+                permissions = get_permissions_by_username(username)
+                token = generate_token(user, permissions)
                 return jsonify({"message": "Login successful", "token": token})
             else:
                 return {'message': 'Invalid password'}, 401
