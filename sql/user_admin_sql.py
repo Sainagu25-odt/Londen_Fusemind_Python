@@ -30,3 +30,30 @@ INSERT_USER_PERM_SQL = """
 INSERT INTO login_permissions (login_name, permission_name)
 VALUES (:username, :perm_name)
 """
+
+UPDATE_USER_SQL = """
+UPDATE logins
+SET name = :username,
+    display_name = :display_name, 
+    email = :email, 
+    homepage = :homepage,
+    password = CASE 
+        WHEN NULLIF(:password, '') IS NOT NULL THEN MD5(:password)
+        ELSE password
+    END
+WHERE name = :original_username
+"""
+
+GET_USER_SQL = """
+SELECT 
+    l.name,
+    l.display_name,
+    l.email,
+	l.homepage,
+    l.created_at,
+    STRING_AGG(lp.permission_name, ',') AS permissions
+FROM logins l
+LEFT JOIN login_permissions lp ON l.name = lp.login_name
+WHERE l.name = :username
+GROUP BY l.name, l.display_name, l.email,l.homepage, l.created_at
+"""
