@@ -19,6 +19,7 @@ from routes.campain_manager.schema import campaign_edit_response, criteria_model
     pull_item_model, active_pulls_response_model, pull_request_parser, \
      campaign_response, counts_response
 from sql.campaigns_sql import GET_CAMPAIGN_LIST_FILENAME
+from utils.auth import require_permission
 from utils.token import token_required
 
 # Define the namespace
@@ -29,6 +30,7 @@ campaign_ns.models[campaign_response.name] = campaign_response
 @campaign_ns.route('')
 class CampaignList(Resource):
     @token_required(current_app)
+    @require_permission("cms")
     @campaign_ns.doc(params={'include_deleted': 'Set to true to include deleted campaigns'})
     @campaign_ns.marshal_with(campaign_response)
     def get(self):
@@ -44,6 +46,7 @@ class CampaignList(Resource):
 @campaign_ns.route('/<int:campaign_id>/delete')
 class DeleteCampaign(Resource):
     @token_required(current_app)
+    @require_permission("cms")
     @campaign_ns.doc(description="Soft delete a campaign")
     def get(self, campaign_id):
         try:
@@ -59,6 +62,7 @@ campaign_ns.models[criteria_model.name] = criteria_model
 @campaign_ns.route('/<int:campaign_id>/undelete')
 class DeleteCampaign(Resource):
     @token_required(current_app)
+    @require_permission("cms")
     @campaign_ns.doc(description="Restore (undelete) a campaign")
     def get(self, campaign_id):
         try:
@@ -120,6 +124,7 @@ edit_response = campaign_ns.model("EditCampaignResponse", {
 @campaign_ns.doc(params={"show_counts": "Set to 1 to include counts"})
 class EditCampaign(Resource):
     @token_required(current_app)
+    @require_permission("cms")
     @campaign_ns.expect(edit_parser)
     @campaign_ns.marshal_with(edit_response)
     def get(self, campaign_id):
@@ -143,6 +148,7 @@ add_crit_model = campaign_ns.model('NewCriterion', {
 @campaign_ns.route('/<int:campaign_id>/save')
 class SaveCampaign(Resource):
     @token_required(current_app)
+    @require_permission("cms")
     def post(self, campaign_id):
         try:
             data = request.get_json()
@@ -167,6 +173,7 @@ class SaveCampaign(Resource):
 @campaign_ns.route('/<int:campaign_id>/deleteCriteria/<int:row_id>')
 class DeleteCriterion(Resource):
     @token_required(current_app)
+    @require_permission("cms")
     def get(self, campaign_id, row_id):
         try:
             delete_criteria_row(campaign_id, row_id)
@@ -184,6 +191,7 @@ class DeleteCriterion(Resource):
 @campaign_ns.route('/<int:campaign_id>/newCriteria')
 class AddCriterion(Resource):
     @token_required(current_app)
+    @require_permission("cms")
     @campaign_ns.expect(add_crit_model, validate=True)
     @campaign_ns.response(200, 'Criterion added successfully')
     @campaign_ns.response(400, 'Bad Request')
@@ -219,6 +227,7 @@ add_campaign_model = campaign_ns.model('NewCampaign', {
 @campaign_ns.route('/addCampaign')
 class AddCampaign(Resource):
     @token_required(current_app)
+    @require_permission("cms")
     @campaign_ns.expect(add_campaign_model, validate=True)
     @campaign_ns.response(200, 'Campaign created successfully')
     @campaign_ns.response(400, 'Bad Request')
@@ -271,6 +280,7 @@ class CampaignFormDropdowns(Resource):
 @campaign_ns.route("/<int:campaign_id>/request")
 class CampaignPullRequest(Resource):
     @token_required(current_app)
+    @require_permission("cms")
     def get(self,campaign_id):
         try:
             result = build_campaign_request_response(campaign_id, g.current_user)
@@ -286,6 +296,7 @@ campaign_ns.models[active_pulls_response_model.name] = active_pulls_response_mod
 @campaign_ns.route("/pull")
 class PullInsert(Resource):
     @token_required(current_app)
+    @require_permission("cms")
     @campaign_ns.expect(pull_request_parser)
     @campaign_ns.marshal_with(active_pulls_response_model)
     def get(self):
@@ -302,6 +313,7 @@ class PullInsert(Resource):
 @campaign_ns.route("/pulls")
 class PullsAll(Resource):
     @token_required(current_app)
+    @require_permission("cms")
     @campaign_ns.marshal_with(active_pulls_response_model)
     def get(self):
         try:
@@ -320,6 +332,7 @@ class PullsAll(Resource):
 @campaign_ns.response(404, 'Campaign not found')
 class CampaignRecords(Resource):
     @token_required(current_app)
+    @require_permission("cms")
     @campaign_ns.doc('get_campaign_records')
     def get(self, campaign_id):
         try:
@@ -343,6 +356,7 @@ campaign_ns.models[counts_response.name] = counts_response
 @campaign_ns.route('/<int:campaign_id>/counts')
 class CountsResource(Resource):
     @token_required(current_app)
+    @require_permission("cms")
     @campaign_ns.doc(params={
         'exclude': 'Comma-separated list of campaign_list IDs to exclude',
         'household': 'Boolean flag to get household counts (true/false)'
@@ -362,6 +376,7 @@ class CountsResource(Resource):
 @campaign_ns.route('/counts')
 class GlobalCampaignCounts(Resource):
     @token_required(current_app)
+    @require_permission("cms")
     @campaign_ns.marshal_list_with(global_count_model)
     def get(self):
         try:
@@ -378,6 +393,7 @@ class GlobalCampaignCounts(Resource):
 @campaign_ns.route("/pull/<int:id>/download")
 class DownloadPullFile(Resource):
     @token_required(current_app)
+    @require_permission("cms")
     def get(self, id):
         try:
             # Fetch filename from DB
@@ -421,6 +437,7 @@ class DownloadPullFile(Resource):
 @campaign_ns.response(404, 'Campaign not found')
 class CampaignCopy(Resource):
     @token_required(current_app)
+    @require_permission("cms")
     @campaign_ns.doc('copy_campaign')
     def get(self, campaign_id):
         try:

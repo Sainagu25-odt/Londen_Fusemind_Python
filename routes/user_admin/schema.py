@@ -11,8 +11,6 @@ add_user_request = user_ns.model("AddUserRequest", {
     "permissions": fields.List(fields.String)
 })
 
-
-
 user_response = user_ns.model("UserResponse", {
     "username": fields.String,
     "display_name": fields.String,

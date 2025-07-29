@@ -14,6 +14,7 @@ class UserList(Resource):
     @require_permission("User Admin")
     @user_ns.marshal_list_with(user_list_response)
     def get(self):
+        """Get all the Users"""
         try:
             users = get_all_users()
             return {"users": users}, 200
@@ -46,7 +47,6 @@ class EditUser(Resource):
         """Edit user by username."""
         try:
             data = request.json
-            print(data)
             updated_user = edit_user(username, data)
             return updated_user, 200
         except Exception as e:

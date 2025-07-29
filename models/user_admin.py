@@ -51,7 +51,6 @@ def add_user(data):
             'username': username,
             'perm_name': perm
         })
-    #
     db.session.commit()
     return {
         'username': username,
@@ -64,18 +63,7 @@ def add_user(data):
 
 
 def edit_user(username, data):
-    print({
-        "original_username": username,
-        "username": data["username"],
-        "display_name": data["display_name"],
-        "email": data.get("email"),
-        "homepage": data.get("homepage"),
-        "password": data.get("password") or None
-    })
-
     db.session.execute(text(q.DELETE_USER_PERMS_SQL), {"username": username})
-    print("user deleted from permissions")
-
     db.session.execute(
         text(q.UPDATE_USER_SQL),
         {
@@ -87,16 +75,12 @@ def edit_user(username, data):
             "password": data.get("password") or None
         }
     )
-    print("updated_user")
+    print("Inserted data ")
     for perm in data.get("permissions", []):
-        print(perm)
-        print(data["username"])
         db.session.execute(text(q.INSERT_USER_PERM_SQL), {"username":data["username"] , "perm_name": perm})
-    print("updated permissions")
     db.session.commit()
-    #
+    print("perm inserted")
     result = db.session.execute(text(q.GET_USER_SQL), {"username": data["username"]}).mappings().fetchone()
-    print(result)
     return {
         "username": result['name'],
         "display_name": result["display_name"],
