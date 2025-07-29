@@ -6,6 +6,7 @@ from flask import request, jsonify, current_app, g
 
 from models.reports_source import get_responder_data, fetch_feed_manager_data
 from routes.reports.schema import get_responder_file_models,get_feedManager_models
+from utils.auth import require_permission
 
 from utils.token import token_required
 
@@ -16,6 +17,7 @@ record_model, response_model = get_responder_file_models(reports_ns)
 @reports_ns.route('/responderFile')
 class ResponderFile(Resource):
     @token_required(current_app)
+    @require_permission("sysreports")
     @reports_ns.doc(description="Get responder file report")
     @reports_ns.marshal_with(response_model)
     def get(self):
@@ -32,6 +34,7 @@ feed_manager_record_model, feed_manager_response_model = get_feedManager_models(
 @reports_ns.route("/feedManager")
 class FeedManager(Resource):
     @token_required(current_app)
+    @require_permission("sysreports")
     @reports_ns.doc(params={
         "date_from": "Start date (YYYY-MM-DD), optional",
         "date_to": "End date (YYYY-MM-DD), optional",

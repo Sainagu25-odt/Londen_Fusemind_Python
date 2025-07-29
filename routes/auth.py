@@ -33,7 +33,8 @@ class Login(Resource):
             if hashed_password == user['password']:
                 permissions = get_permissions_by_username(username)
                 token = generate_token(user, permissions)
-                return jsonify({"message": "Login successful", "token": token})
+                return jsonify({"message": "Login successful", "token": token, "permissions" : permissions,
+                                "username" : user["display_name"]})
             else:
                 return {'message': 'Invalid password'}, 401
         else:

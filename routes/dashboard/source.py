@@ -3,10 +3,13 @@ from flask_restx import  Resource
 from models.dashboard import get_dashboard_stats
 from utils.token import token_required
 from routes.dashboard.schema import dashboard_response, api as dashboard_ns
+from utils.auth import require_permission
+
 
 @dashboard_ns.route("")
 class DashboardAPI(Resource):
     @token_required(current_app)
+    @require_permission("dashboard")
     @dashboard_ns.response(200, "Success", dashboard_response)
     @dashboard_ns.response(500, "Internal Server Error")
     def get(self):
