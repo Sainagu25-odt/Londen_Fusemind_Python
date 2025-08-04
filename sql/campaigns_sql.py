@@ -352,3 +352,50 @@ campaign_id, column_name, sql_type, sql_value, position, or_next
 :campaign_id, :column_name, :sql_type, :sql_value, :position, :or_next
 )
 """
+
+GET_CAMPAIGN_BY_ID = """
+    SELECT id FROM campaigns WHERE id = :cid
+"""
+
+INSERT_CRITERION = """
+    INSERT INTO campaign_criteria (campaign_id, position)
+    VALUES (:campaign_id, (
+        SELECT COALESCE(MAX(position), 0) + 1 FROM campaign_criteria WHERE campaign_id = :campaign_id
+    ))
+    RETURNING id, campaign_id, position
+"""
+
+GET_DATASOURCE_CAMPAIGN_ID = """
+        SELECT cd.tablename
+        FROM campaigns c
+        JOIN campaign_datasources cd ON cd.datasource = c.datasource
+        WHERE c.id = :cid
+    """
+
+GET_COLUMNS_SQL = """
+SELECT column_name
+FROM information_schema.columns
+WHERE table_schema = 'public'
+  AND table_name = :table
+ORDER BY column_name
+"""
+
+GET_LEGEND_VALUES_SQL = """
+SELECT {column} AS value, COUNT(*) AS total
+FROM {table_name}
+GROUP BY {column}
+ORDER BY total DESC
+LIMIT 100
+"""
+
+GET_DATASOURCE = """
+SELECT datasource FROM campaigns WHERE id =:cid
+"""
+
+GET_SUBQUERY_DIALOG_SQL = """
+SELECT child_table AS table, label
+FROM campaign_subqueries
+WHERE parent_table = :parent_table
+GROUP BY child_table, label
+ORDER BY child_table;
+"""

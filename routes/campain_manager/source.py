@@ -7,17 +7,18 @@ from flask_restx import Namespace, Resource, fields, reqparse
 from flask import request, jsonify, current_app, g, send_file
 from sqlalchemy.exc import SQLAlchemyError
 
-from models.campaigns import  soft_delete_campaign, get_campaigns, undelete_campaign, \
+from models.campaigns import soft_delete_campaign, get_campaigns, undelete_campaign, \
     get_campaign_edit_data, add_criterion, add_campaign, get_dropdowns_for_datasources, build_campaign_request_response, \
     insert_pull_list, get_global_active_pulls, get_campaign_counts, get_global_campaign_counts, \
-    save_campaign_criteria, delete_criteria_row, get_campaign_record_data, copy_campaign
+    save_campaign_criteria, delete_criteria_row, get_campaign_record_data, copy_campaign, add_new_criteria_simple, \
+    get_add_criteria_dropdowns, get_legend_values, get_subquery_dialog_options
 from extensions import db
 from sqlalchemy import text
 
 from routes.campain_manager.dropdown_service import get_criteria_options
 from routes.campain_manager.schema import campaign_edit_response, criteria_model, \
     pull_item_model, active_pulls_response_model, pull_request_parser, \
-     campaign_response, counts_response
+    campaign_response, counts_response, add_criteria_response
 from sql.campaigns_sql import GET_CAMPAIGN_LIST_FILENAME
 from utils.auth import require_permission
 from utils.token import token_required
@@ -447,6 +448,95 @@ class CampaignCopy(Resource):
             return {"message": "Campaign copied successfully", "new_campaign_id": new_campaign_id}, 200
         except Exception as e:
             return {"error": {str(e)}}, 500
+
+
+#response for add criteria
+add_criteria_response = campaign_ns.model('AddCriteriaResponse', {
+    'status': fields.String,
+    'data': fields.Integer
+})
+@campaign_ns.route("/addCriteria")
+class AddCriteriaResource(Resource):
+    @campaign_ns.marshal_with(add_criteria_response)
+    def post(self):
+        try:
+            data = request.get_json()
+            criterion_id = add_new_criteria_simple(data["cid"])
+            return {"status": "ok", "data": criterion_id}, 200
+        except Exception as e:
+            return {"error" : e}, 500
+
+add_criteria_dropdown = campaign_ns.model('AddCriteriaDropdown', {
+    'columns': fields.List(fields.String),
+    'operators': fields.List(fields.Raw),
+    'values': fields.List(fields.String)
+})
+
+add_criteria_dropdown_response = campaign_ns.model('AddCriteriaDropdownResponse', {
+    'status': fields.String,
+    'data': fields.Nested(add_criteria_dropdown)
+})
+@campaign_ns.route("/criteria/dropdowns")
+class CriteriaDropdownsResource(Resource):
+    @campaign_ns.marshal_with(add_criteria_dropdown_response)
+    def post(self):
+        try:
+            """Get dropdowns (columns, operators, values) for Add Criteria"""
+            data = request.get_json()
+            result = get_add_criteria_dropdowns(data["cid"])
+            return {"status": "ok", "data": result}, 200
+        except Exception as e:
+            return {"error" : str(e)}, 500
+
+# Nested model for each legend item
+legend_item = campaign_ns.model('LegendItem', {
+    'value': fields.String,
+    'total': fields.Integer
+})
+
+legend_response = campaign_ns.model('LegendResponse', {
+    'status': fields.String,
+    'data': fields.List(fields.Nested(legend_item))
+})
+campaign_ns.models[legend_response.name] = legend_response
+@campaign_ns.route("/legend")
+class LegendResource(Resource):
+    @campaign_ns.marshal_with(legend_response)
+    def post(self):
+        try:
+            data = request.get_json()
+            values = get_legend_values(data["cid"], data["col"])
+            return {"status": "ok", "data": values}, 200
+        except Exception as e:
+            return {"error" : str(e)}, 500
+
+subquery_dialog_response = campaign_ns.model('SubqueryDialogResponse', {
+    'status': fields.String,
+    'data': fields.Nested(campaign_ns.model('SubqueryOption', {
+        'table': fields.List(fields.String),
+        'operator' : fields.List(fields.String),
+        'label': fields.List(fields.String)
+    }))
+})
+campaign_ns.models[subquery_dialog_response.name] = subquery_dialog_response
+@campaign_ns.route('/subqueryDialog')
+class SubqueryDialogResource(Resource):
+    @campaign_ns.marshal_with(subquery_dialog_response)
+    def post(self):
+        try:
+            data = request.get_json()
+            options = get_subquery_dialog_options(data["cid"])
+            return {"status" : "oK", "data" : options}, 200
+        except Exception as e:
+            return {"error" : str(e)}, 500
+
+
+new_subquery_response = campaign_ns.model('NewSubqueryResponse', {
+    'status': fields.String,
+    'data': fields.Integer
+})
+
+
 
 
 

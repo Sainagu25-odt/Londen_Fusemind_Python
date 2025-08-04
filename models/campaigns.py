@@ -603,3 +603,113 @@ def copy_campaign(original_id):
 
     db.session.commit()
     return new_campaign_id
+
+
+def add_new_criteria_simple(campaign_id : int):
+    campaign = db.session.execute(
+        text(q.GET_CAMPAIGN_BY_ID), {"cid": campaign_id}
+    ).fetchone()
+    if not campaign:
+        return None, "Invalid Campaign ID"
+
+    # 2. Insert new criterion
+    result = db.session.execute(text(q.INSERT_CRITERION),
+                           {"campaign_id": campaign_id})
+    row = result.fetchone()
+    db.session.commit()
+
+    return row.id
+
+OPERATORS = [
+    {"key": "equals", "label": "Equals"},
+    {"key": "not_equal", "label": "Not Equal"},
+    {"key": "contains", "label": "Contains"},
+    {"key": "does_not_contain", "label": "Does Not Contain"},
+    {"key": "greater_than", "label": "Greater Than"},
+    {"key": "less_than", "label": "Less Than"},
+    {"key": "equals_field", "label": "Equals Field"},
+    {"key": "not_equal_field", "label": "Not Equal Field"},
+    {"key": "greater_than_field", "label": "Greater Than Field"},
+    {"key": "less_than_field", "label": "Less Than Field"},
+    {"key": "in_comma_separated_field", "label": "IN Comma Separated Field"},
+    {"key": "not_in_comma_separated_field", "label": "Not In Comma Separated Field"},
+    {"key": "is_empty", "label": "Is Empty"},
+    {"key": "not_empty", "label": "Not Empty"},
+]
+
+def get_add_criteria_dropdowns(campaign_id : int):
+    campaign = db.session.execute(
+        text(q.GET_CAMPAIGN_BY_ID), {"cid": campaign_id}
+    ).fetchone()
+    if not campaign:
+        return None, "Invalid Campaign ID"
+
+    result = db.session.execute(text(q.GET_DATASOURCE_CAMPAIGN_ID), {"cid": campaign_id}).fetchone()
+
+    if not result:
+        return []
+    table_name = result[0]
+
+    rows = db.session.execute(text(q.GET_COLUMNS_SQL), {"table": table_name}).fetchall()
+    columns = [row[0] for row in rows]
+    return {
+        "columns": columns,
+        "operators": OPERATORS,
+        "values": []
+    }
+
+
+def get_legend_values(campaign_id, column):
+
+    result= db.session.execute(text(q.GET_DATASOURCE_CAMPAIGN_ID), {"cid": campaign_id}).fetchone()
+    if not result:
+        return []
+    table_name = result[0]
+
+    legend_sql = q.GET_LEGEND_VALUES_SQL.format(
+        column=column,
+        table_name=table_name
+    )
+
+    rows = db.session.execute(text(legend_sql)).fetchall()
+    result = [
+        {
+            "value": str(row[0]) if row[0] is not None else "",
+            "total": int(row[1])
+        }
+        for row in rows
+    ]
+    return result
+
+def get_subquery_dialog_options(campaign_id : int):
+    result = db.session.execute(text(q.GET_DATASOURCE), {"cid": campaign_id}).fetchone()
+    if not result:
+        return {"tables": [], "labels": []}
+    datasource = result[0]
+
+    rows = db.session.execute(text(q.GET_SUBQUERY_DIALOG_SQL), {"parent_table": datasource}).fetchall()
+    table_names = []
+    label_names = []
+
+    for r in rows:
+        table_value = r[0]
+        label_value = r[1]
+
+        if table_value not in table_names:
+            table_names.append(table_value)
+        if label_value not in label_names:
+            label_names.append(label_value)
+    return {
+        "table": table_names,
+        "operator" : ["In", "Not In"],
+        "label": label_names
+    }
+
+
+
+
+
+
+
+
+

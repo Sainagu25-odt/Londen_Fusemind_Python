@@ -46,6 +46,7 @@ def parse_responder_yaml():
     return col_defs, col_names
 
 def import_csv_to_db(csv_path, column_names):
+    print(f"[INFO] Importing CSV: {csv_path}")
     with open(csv_path, 'r', newline='', encoding='utf-8') as f:
         reader = csv.reader(f, delimiter='\t')
         row_count = 0
@@ -76,10 +77,11 @@ def import_csv_to_db(csv_path, column_names):
             print(f"With parameters: {params}")
             db.session.execute(text(insert_sql), params)
     db.session.commit()
-    print(f"Inserted {row_count} rows successfully.")
+    print(f"[INFO] Inserted {row_count} rows successfully.")
 
 
 def create_import_table(col_defs):
+    print("[INFO] Creating import_responder table...")
     create_sql = f"""
     CREATE TABLE import_responder (
         {', '.join(col_defs)}
@@ -91,10 +93,10 @@ def create_import_table(col_defs):
 def execute_responder_task(base_dir, debug=False):
     ftp_config = load_ftp_credentials()
     remote_dir = ftp_config["remote_dir"]
-
     tmp_dir = os.path.join(base_dir, 'tmp')
     archive_base = os.path.join(base_dir, 'archive')
     os.makedirs(tmp_dir, exist_ok=True)
+    os.makedirs(archive_base, exist_ok=True)
 
 
     current_month = datetime.now().strftime('%Y%m')
@@ -103,7 +105,8 @@ def execute_responder_task(base_dir, debug=False):
 
     sftp = get_sftp_client(ftp_config)
 
-    archived_files = set(f for f in os.listdir(os.path.join(archive_base)) if f.startswith("Responders.zip"))
+    archived_files = set(os.listdir(archive_base))
+
     for filename in sftp.listdir(remote_dir):
         if re.match(r'^Responders\.zip.*', filename) and filename not in archived_files:
             remote_file = f"{remote_dir}/{filename}"
@@ -111,7 +114,8 @@ def execute_responder_task(base_dir, debug=False):
             local_archive_path = os.path.join(archive_dir, filename)
 
             if debug:
-                print(f"Downloading: {filename}")
+                print(f"[INFO] Downloading {filename} ...")
+
 
             sftp.get(remote_file, local_tmp_path)
 
@@ -122,11 +126,10 @@ def execute_responder_task(base_dir, debug=False):
             with zipfile.ZipFile(local_archive_path, 'r') as zip_ref:
                 zip_ref.extractall(tmp_dir)
 
-            extracted_file = next((f for f in os.listdir(tmp_dir) if f.endswith('.csv')), None)
-            print(extracted_file)
+            extracted_file = next((f for f in os.listdir(tmp_dir) if f.endswith('.csv') or f.endswith('.txt')), None)
+            print(f"[INFO] Extracted file: {extracted_file}")
 
             date_match = re.search(r'(\d{4}-\d{2}-\d{2})', extracted_file)
-
             if not date_match:
                 raise Exception("Date not found in file name.")
 
@@ -155,11 +158,10 @@ def execute_responder_task(base_dir, debug=False):
                 log_id = db.session.execute(text(q.GET_RESPONDER_ID), {"filename": zip_filename_for_log}).scalar()
 
             records = db.session.execute(text("SELECT count(*) FROM import_responder")).scalar()
-            print(records)
 
             db.session.execute(text(q.UPDATE_LOGS), {
                 "records": records,
-                "imported_at": datetime.now().replace(microsecond=0),
+                "imported_at": datetime.now(),
                 "id": log_id
             })
 
@@ -181,7 +183,5 @@ def execute_responder_task(base_dir, debug=False):
             db.session.execute(text("ANALYZE responder_file"))
             db.session.execute(text("CLUSTER responses"))
             db.session.execute(text("ANALYZE responses"))
-
             db.session.commit()
-
 
