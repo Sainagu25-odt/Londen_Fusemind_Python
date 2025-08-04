@@ -32,7 +32,7 @@ class Login(Resource):
             hashed_password = hashlib.md5(password.encode()).hexdigest()
             if hashed_password == user['password']:
                 permissions = get_permissions_by_username(username)
-                token = generate_token(user)
+                token = generate_token(user, permissions)
                 return jsonify({"message": "Login successful", "token": token, "permissions" : permissions,
                                 "username" : user["display_name"]})
             else:

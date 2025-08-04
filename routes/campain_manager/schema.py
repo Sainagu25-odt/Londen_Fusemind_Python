@@ -64,6 +64,34 @@ active_pulls_response_model = Model("ActivePullsResponse", {
     "active_pulls": fields.List(fields.Nested(pull_item_model))
 })
 
+#response for add criteria
+add_criteria_response = Model('AddCriteriaResponse', {
+    'status': fields.String,
+    'data': fields.Integer
+})
+
+
+
+# Nested model for each legend item
+legend_item = Model('LegendItem', {
+    'value': fields.String,
+    'total': fields.Integer
+})
+
+legend_response = Model('LegendResponse', {
+    'status': fields.String,
+    'data': fields.List(fields.Nested(legend_item))
+})
+
+subquery_dialog_response = Model('SubqueryDialogResponse', {
+    'status': fields.String,
+    'data': fields.Nested(Model('SubqueryOption', {
+        'table': fields.List(fields.String),
+        'operator' : fields.List(fields.String),
+        'label': fields.List(fields.String)
+    }))
+})
+
 
 
 

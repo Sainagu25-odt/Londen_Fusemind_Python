@@ -10,9 +10,15 @@ responder_ns = Namespace('Responder', description='Responder File APIs')
 @responder_ns.route('/process')
 class ResponderProcessAPI(Resource):
     def post(self):
+        """
+        Trigger responder file import:
+        - Downloads ZIP from SFTP
+        - Extracts CSV
+        - Imports data into import_responder
+        - Updates logs and populates responses and responder_file
+        """
         try:
             base_dir = os.path.join(os.getcwd(), 'responder_files')
-            print(base_dir)
             os.makedirs(base_dir, exist_ok=True)
             execute_responder_task(base_dir=base_dir, debug=True)
             return {"message": "Responder processing completed"}, 200
