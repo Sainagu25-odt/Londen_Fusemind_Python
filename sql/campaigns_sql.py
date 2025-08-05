@@ -34,7 +34,8 @@ SELECT
     c.channel,
     c.begin_date,
     c.deleted_at IS NOT NULL AS deleted,
-    d.tablename
+    d.tablename,
+    c.datasource
 FROM campaigns c
 LEFT JOIN campaign_datasources d ON c.datasource = d.datasource
 WHERE c.id = :id
@@ -398,4 +399,32 @@ FROM campaign_subqueries
 WHERE parent_table = :parent_table
 GROUP BY child_table, label
 ORDER BY child_table;
+"""
+
+GET_CAMPAIGN_SUBQUERY = """
+SELECT id FROM campaign_subqueries
+WHERE parent_table = :parent_ds AND child_table = :table AND label = :label
+"""
+
+INSERT_SUBQUERY_CAMPAIGN = """
+INSERT INTO campaigns (name, begin_date, subquery, campaign_subquery_id, datasource)
+VALUES (:name, CURRENT_DATE, true, :subquery_id, :table)
+RETURNING id
+"""
+
+
+INSERT_CRITERION_IN_PARENT = """
+INSERT INTO campaign_criteria (campaign_id, position, sql_type, sql_value)
+VALUES (:campaign_id, (SELECT COALESCE(MAX(position), 0) + 1 FROM campaign_criteria WHERE campaign_id = :campaign_id),
+        :sql_type, :sql_value)
+"""
+
+INSERT_EMPTY_CRITERION_IN_SUBQUERY = """
+INSERT INTO campaign_criteria (campaign_id, position)
+VALUES (:campaign_id,
+        (SELECT COALESCE(MAX(position), 0) + 1 FROM campaign_criteria WHERE campaign_id = :campaign_id))
+"""
+
+GET_CAMPAIGN_BY_CAMPAIGN_ID = """
+SELECT id, name, datasource FROM campaigns WHERE id = :cid
 """
