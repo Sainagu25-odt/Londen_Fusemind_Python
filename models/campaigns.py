@@ -90,7 +90,7 @@ def get_campaign_edit_data(campaign_id, show_counts):
         "channel": result["channel"],
         "begin_date": str(result["begin_date"]) if result["begin_date"] else None,
         "deleted": result["deleted"],
-        "datasource_table": result["tablename"],
+        "datasource_table": result["datasource"],
         "criteria": criteria,
         "subqueries": subqueries
     }
@@ -704,6 +704,51 @@ def get_subquery_dialog_options(campaign_id : int):
         "operator" : ["In", "Not In"],
         "label": label_names
     }
+
+
+def create_subquery_campaign(cid, table, label, method):
+
+    parent = db.session.execute(text(q.GET_CAMPAIGN_BY_CAMPAIGN_ID), {"cid": cid}).mappings().first()
+    if not parent:
+        raise Exception("campaign not found")
+
+    # Step 2: Get campaign_subquery ID
+    subquery_row = db.session.execute(text(q.GET_CAMPAIGN_SUBQUERY), {
+        "parent_ds": parent["datasource"],
+        "table": table,
+        "label": label
+    }).mappings().first()
+
+
+    if not subquery_row:
+        raise Exception("Campaign subquery mapping not found")
+
+
+    # Step 3: Insert new campaign (as subquery)
+    subquery_name = f"subquery for {parent['name']}"
+    result = db.session.execute(text(q.INSERT_SUBQUERY_CAMPAIGN), {
+        "name": subquery_name,
+        "subquery_id": subquery_row["id"],
+        "table": table
+    })
+    new_subquery_id = result.scalar()
+
+    # Step 4: Add criterion to parent campaign
+    sql_type = "in_sub" if method == "in" else "not_in_sub"
+    db.session.execute(text(q.INSERT_CRITERION_IN_PARENT), {
+        "campaign_id": cid,
+        "sql_type": sql_type,
+        "sql_value": new_subquery_id
+    })
+
+    # Step 5: Add empty criterion to subquery
+    db.session.execute(text(q.INSERT_EMPTY_CRITERION_IN_SUBQUERY), {
+        "campaign_id": new_subquery_id
+    })
+
+
+    db.session.commit()
+    return new_subquery_id
 
 
 

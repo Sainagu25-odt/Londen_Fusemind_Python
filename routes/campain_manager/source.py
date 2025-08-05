@@ -11,7 +11,7 @@ from models.campaigns import soft_delete_campaign, get_campaigns, undelete_campa
     get_campaign_edit_data, add_criterion, add_campaign, get_dropdowns_for_datasources, build_campaign_request_response, \
     insert_pull_list, get_global_active_pulls, get_campaign_counts, get_global_campaign_counts, \
     save_campaign_criteria, delete_criteria_row, get_campaign_record_data, copy_campaign, add_new_criteria_simple, \
-    get_add_criteria_dropdowns, get_legend_values, get_subquery_dialog_options
+    get_add_criteria_dropdowns, get_legend_values, get_subquery_dialog_options, create_subquery_campaign
 from extensions import db
 from sqlalchemy import text
 
@@ -505,6 +505,12 @@ class LegendResource(Resource):
     def post(self):
         try:
             data = request.get_json()
+            if "cid" not in data:
+                return {"status": "error", "message": "'cid' is required"}, 400
+
+            if "col" not in data or not data["col"]:
+                return {"status": "error", "message": "'col' is required to fetch legend values"}, 400
+
             values = get_legend_values(data["cid"], data["col"])
             return {"status": "ok", "data": values}, 200
         except Exception as e:
@@ -535,6 +541,24 @@ new_subquery_response = campaign_ns.model('NewSubqueryResponse', {
     'status': fields.String,
     'data': fields.Integer
 })
+
+@campaign_ns.route('/newSubquery')
+class NewSubqueryResource(Resource):
+    @campaign_ns.marshal_with(new_subquery_response)
+    def post(self):
+        try:
+            data = request.get_json()
+            cid = data["cid"]
+            table = data["table"]
+            label = data["label"]
+            method = data["method"]
+            new_subquery_id = create_subquery_campaign(cid, table, label, method)
+            return {"status": "ok", "data": new_subquery_id}, 200
+        except Exception as e:
+            return {"error" : str(e)}, 500
+
+
+
 
 
 
