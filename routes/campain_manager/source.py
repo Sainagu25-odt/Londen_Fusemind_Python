@@ -11,7 +11,8 @@ from models.campaigns import soft_delete_campaign, get_campaigns, undelete_campa
     get_campaign_edit_data, add_criterion, add_campaign, get_dropdowns_for_datasources, build_campaign_request_response, \
     insert_pull_list, get_global_active_pulls, get_campaign_counts, get_global_campaign_counts, \
     save_campaign_criteria, delete_criteria_row, get_campaign_record_data, copy_campaign, add_new_criteria_simple, \
-    get_add_criteria_dropdowns, get_legend_values, get_subquery_dialog_options, create_subquery_campaign
+    get_add_criteria_dropdowns, get_legend_values, get_subquery_dialog_options, create_subquery_campaign, \
+    get_campaign_by_id, get_criteria_for_campaign
 from extensions import db
 from sqlalchemy import text
 
@@ -74,67 +75,127 @@ class DeleteCampaign(Resource):
 
 
 
-# Request parser
-edit_parser = reqparse.RequestParser()
-edit_parser.add_argument("show_counts", type=int, default=0)
+# # Request parser
+# edit_parser = reqparse.RequestParser()
+# edit_parser.add_argument("show_counts", type=int, default=0)
+#
+# # Criteria model
+# criteria_field = campaign_ns.model("Criterion", {
+#     "row_id": fields.Integer,
+#     "column_name": fields.String,
+#     "operator": fields.String,
+#     "value": fields.String,
+#     "is_or": fields.Boolean
+# })
+#
+# # Subquery join info
+# subquery_join_model = campaign_ns.model("SubqueryJoin", {
+#     "label": fields.String,
+#     "parent_table": fields.String,
+#     "child_table": fields.String,
+#     "parent_field": fields.String,
+#     "child_field": fields.String
+# })
+#
+# # Subquery model
+# subquery_model = campaign_ns.model("Subquery", {
+#     "id": fields.Integer,
+#     "name": fields.String,
+#     "begin_date": fields.String,
+#     "deleted": fields.Boolean,
+#     "criteria": fields.List(fields.Nested(criteria_field)),
+#     "join": fields.Nested(subquery_join_model)
+# })
+#
+# # Final edit response
+# edit_response = campaign_ns.model("EditCampaignResponse", {
+#     "id": fields.Integer,
+#     "name": fields.String,
+#     "description": fields.String,
+#     "channel": fields.String,
+#     "begin_date": fields.String,
+#     "deleted": fields.Boolean,
+#     "datasource_table": fields.String,
+#     "criteria": fields.List(fields.Nested(criteria_field)),
+#     "subqueries": fields.List(fields.Nested(subquery_model)),
+#     "counts": fields.Integer
+# })
+#
+# #edit campaign api
+# @campaign_ns.route("/<int:campaign_id>/edit")
+# @campaign_ns.doc(params={"show_counts": "Set to 1 to include counts"})
+# class EditCampaign(Resource):
+#     @token_required(current_app)
+#     @require_permission("cms")
+#     @campaign_ns.expect(edit_parser)
+#     @campaign_ns.marshal_with(edit_response)
+#     def get(self, campaign_id):
+#         args = edit_parser.parse_args()
+#         try:
+#             return get_campaign_edit_data(campaign_id, args["show_counts"])
+#         except Exception as e:
+#             current_app.logger.error(f"EditCampaign failed: {e}")
+#             return {"message": "Failed to retrieve campaign"}, 500
 
-# Criteria model
-criteria_field = campaign_ns.model("Criterion", {
-    "row_id": fields.Integer,
-    "column_name": fields.String,
-    "operator": fields.String,
-    "value": fields.String,
-    "is_or": fields.Boolean
-})
 
-# Subquery join info
-subquery_join_model = campaign_ns.model("SubqueryJoin", {
-    "label": fields.String,
-    "parent_table": fields.String,
-    "child_table": fields.String,
-    "parent_field": fields.String,
-    "child_field": fields.String
-})
-
-# Subquery model
-subquery_model = campaign_ns.model("Subquery", {
-    "id": fields.Integer,
-    "name": fields.String,
-    "begin_date": fields.String,
-    "deleted": fields.Boolean,
-    "criteria": fields.List(fields.Nested(criteria_field)),
-    "join": fields.Nested(subquery_join_model)
-})
-
-# Final edit response
-edit_response = campaign_ns.model("EditCampaignResponse", {
-    "id": fields.Integer,
-    "name": fields.String,
+campaign_model = campaign_ns.model('Campaign', {
+    'id': fields.Integer,
+    'name': fields.String,
     "description": fields.String,
     "channel": fields.String,
     "begin_date": fields.String,
-    "deleted": fields.Boolean,
-    "datasource_table": fields.String,
-    "criteria": fields.List(fields.Nested(criteria_field)),
-    "subqueries": fields.List(fields.Nested(subquery_model)),
-    "counts": fields.Integer
+    'datasource': fields.String
 })
 
-#edit campaign api
-@campaign_ns.route("/<int:campaign_id>/edit")
-@campaign_ns.doc(params={"show_counts": "Set to 1 to include counts"})
-class EditCampaign(Resource):
-    @token_required(current_app)
-    @require_permission("cms")
-    @campaign_ns.expect(edit_parser)
-    @campaign_ns.marshal_with(edit_response)
+criterion_model = campaign_ns.model('Criterion', {
+    'id': fields.Integer,
+    'column_name': fields.String,
+    'sql_type': fields.String,
+    'sql_value': fields.String,
+    'position': fields.Integer,
+    'description': fields.String,
+    "is_or": fields.Boolean
+
+})
+
+subquery_model = campaign_ns.model('Subquery', {
+    'subquery_campaign_id': fields.Integer,
+    'subquery_name': fields.String,
+    'criteria': fields.List(fields.Nested(criterion_model))
+})
+
+edit_response_model = campaign_ns.model('EditCampaignResponse', {
+    'campaign': fields.Nested(campaign_model),
+    'criteria': fields.List(fields.Nested(criterion_model)),
+    'subqueries': fields.List(fields.Nested(subquery_model)),
+    'channels': fields.List(fields.String),
+    'show_counts': fields.Boolean
+})
+
+@campaign_ns.route('/<int:campaign_id>/edit')
+class CampaignEditResource(Resource):
+    @campaign_ns.doc(params={
+        'show_counts': 'Optional flag to show step counts'
+    })
+    @campaign_ns.marshal_with(edit_response_model)
     def get(self, campaign_id):
-        args = edit_parser.parse_args()
-        try:
-            return get_campaign_edit_data(campaign_id, args["show_counts"])
-        except Exception as e:
-            current_app.logger.error(f"EditCampaign failed: {e}")
-            return {"message": "Failed to retrieve campaign"}, 500
+        show_counts = int(request.args.get('show_counts', 0))
+
+        campaign = get_campaign_by_id(campaign_id)
+        if campaign:
+            campaign = dict(campaign._mapping)
+        else:
+            campaign = {'id': None, 'name': '', 'subquery': False, 'datasource': ''}
+
+        criteria_data = get_criteria_for_campaign(campaign_id)
+
+        return {
+            'campaign': campaign,
+            'criteria': criteria_data["criteria"],
+            'subqueries': criteria_data["subqueries"],
+            'channels': [],  # Placeholder for future logic
+            'show_counts': bool(show_counts)
+        }
 
 
 

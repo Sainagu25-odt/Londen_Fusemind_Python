@@ -750,6 +750,100 @@ def create_subquery_campaign(cid, table, label, method):
     db.session.commit()
     return new_subquery_id
 
+def get_campaign_by_id(campaign_id):
+    result = db.session.execute(text(q.GET_CAMPAIGN_BY_ID_SQL), {'id': campaign_id})
+    return result.fetchone()
+
+def get_criteria_for_campaign(campaign_id):
+    criteria_rows = db.session.execute(
+        text(q.GET_CAMPAIGN_CRITERIA),
+        {"campaign_id": campaign_id}
+    ).mappings().all()
+
+    result = {
+        "criteria": [],
+        "subqueries": []
+    }
+
+    subquery_map = {}
+
+    for row in criteria_rows:
+        sql_type = row["sql_type"]
+        sql_value = row["sql_value"]
+        column_name = row["column_name"]
+        description = f"{column_name} {sql_type} {sql_value}" if sql_type else "None None None"
+        is_or = row["or_next"]
+        subquery_campaign_id = None
+
+
+        # Check for in_sub/not_in_sub with numeric sql_value
+        if sql_type in ("in_sub", "not_in_sub") and str(sql_value).isdigit():
+            subquery_campaign_id = int(sql_value)
+
+            # Fetch subquery campaign data once
+            if subquery_campaign_id not in subquery_map:
+                sub_data = db.session.execute(
+                    text(q.GET_SUBQUERY_DETAILS),
+                    {"subquery_campaign_id": subquery_campaign_id}
+                ).mappings().first()
+
+                if sub_data:
+                    label = sub_data["label"]
+                    child_table = sub_data["child_table"]
+                    description = f" {label} {'in' if sql_type == 'in_sub' else 'not_in'}:{child_table} where"
+
+                    # Fetch actual criteria of the subquery campaign
+                    sub_criteria_rows = db.session.execute(
+                        text(q.GET_CAMPAIGN_CRITERIA),
+                        {"campaign_id": subquery_campaign_id}
+                    ).mappings().all()
+
+                    actual_sub_criteria = []
+                    for sub_row in sub_criteria_rows:
+                        sub_description = f"{sub_row['column_name']} {sub_row['sql_type']} {sub_row['sql_value']}" if sub_row['sql_type'] else "None None None"
+                        actual_sub_criteria.append({
+                            "id": sub_row["id"],
+                            "sql_type": sub_row["sql_type"],
+                            "sql_value": sub_row["sql_value"],
+                            "position": sub_row["position"],
+                            "description": sub_description,
+                            "column_name": sub_row["column_name"]
+                        })
+
+                    subquery_map[subquery_campaign_id] = {
+                        "subquery_campaign_id": subquery_campaign_id,
+                        "subquery_name": sub_data["name"],
+                        "criteria": actual_sub_criteria
+                    }
+
+            # ✅ Still add the in_sub/not_in_sub row to top-level criteria with description
+            result["criteria"].append({
+                "id": row["id"],
+                "sql_type": sql_type,
+                "sql_value": sql_value,
+                "position": row["position"],
+                "description": description,
+                "column_name": column_name,
+                "is_or": is_or
+            })
+            continue  # Continue after adding
+
+        # Add to top-level criteria
+        result["criteria"].append({
+            "id": row["id"],
+            "sql_type": sql_type,
+            "sql_value": sql_value,
+            "position": row["position"],
+            "description": description,
+            "column_name": column_name,
+            "is_or" : is_or
+        })
+
+    result["subqueries"] = list(subquery_map.values())
+    return result
+
+
+
 
 
 
