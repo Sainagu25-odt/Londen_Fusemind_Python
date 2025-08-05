@@ -428,3 +428,23 @@ VALUES (:campaign_id,
 GET_CAMPAIGN_BY_CAMPAIGN_ID = """
 SELECT id, name, datasource FROM campaigns WHERE id = :cid
 """
+
+GET_CAMPAIGN_BY_ID_SQL = """
+SELECT * FROM campaigns WHERE id = :id
+"""
+
+GET_CAMPAIGN_CRITERIA = """
+SELECT 
+    cc.id, cc.column_name, cc.sql_type, cc.sql_value, cc.position, cc.or_next
+FROM campaign_criteria cc
+WHERE cc.campaign_id = :campaign_id
+ORDER BY cc.position;
+"""
+
+GET_SUBQUERY_DETAILS = """
+SELECT c.id, c.name, cs.id AS subquery_id, cs.label, cs.child_table
+FROM campaigns c
+JOIN campaign_subqueries cs ON cs.id = c.campaign_subquery_id
+WHERE c.id = :subquery_campaign_id;
+"""
+
