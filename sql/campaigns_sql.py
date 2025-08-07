@@ -94,6 +94,15 @@ ADD_CRITERION = """
         (:campaign_id, :column_name, :sql_type, :sql_value, :or_next)
 """
 
+UPDATE_CAMPAIGN = """
+    UPDATE campaigns
+    SET name = :name,
+        description = :description,
+        channel = :channel,
+        begin_date = :begin_date,
+        datasource = :datasource
+    WHERE id = :id
+"""
 
 SAVE_CRITERIA_INSERT = """
 INSERT INTO campaign_criteria (campaign_id, column_name, sql_type, sql_value, or_next)
@@ -106,12 +115,12 @@ SET column_name = :column_name,
     sql_type = :operator,
     sql_value = :value,
     or_next = :is_or
-WHERE id = :id AND campaign_id = :campaign_id
+WHERE id = :id 
 """
 
 DELETE_CRITERIA_ROW = """
 DELETE FROM campaign_criteria
-WHERE id = :id AND campaign_id = :campaign_id
+WHERE id = :id
 """
 
 
