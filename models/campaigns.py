@@ -46,70 +46,33 @@ def undelete_campaign(campaign_id):
         db.session.rollback()
         abort(500, description=f"Database error: {str(e)}")
 
+def save_campaign_criteria(campaign_id, data):
+    campaign_data = data.get("campaign_details", {})
+    if campaign_data:
+        db.session.execute(
+            text(q.UPDATE_CAMPAIGN),
+            {
+                "id": campaign_id,
+                "channel": campaign_data.get("channel"),
+                "begin_date": campaign_data.get("begin_date"),
+                "name": campaign_data.get("name"),
+                "datasource": campaign_data.get("datasource_table"),  # Fix: match bind param
+                "description": campaign_data.get("description")
+            }
+        )
+        db.session.commit()
 
-def get_campaign_edit_data(campaign_id, show_counts):
-    result = db.session.execute(text(q.GET_CAMPAIGN), {"id": campaign_id}).mappings().first()
+    # Process criteria
+    criteria_list = data.get("criteria", [])
 
-    if not result:
-        return {"message": "Campaign not found"}, 404
-
-    # Fetch root criteria
-    criteria_rows = db.session.execute(text(q.GET_CRITERIA), {"id": campaign_id}).mappings().all()
-    criteria = [dict(row) for row in criteria_rows]
-
-    # Fetch subquery children
-    subquery_rows = db.session.execute(text(q.GET_SUBQUERY_CHILDREN), {"parent_id": campaign_id}).mappings().all()
-    subqueries = []
-
-    for sub in subquery_rows:
-        # Join info from campaign_subqueries table
-        join_info = db.session.execute(
-            text(q.GET_SUBQUERY_JOIN),
-            {"parent_id": campaign_id, "sub_id": sub["id"]}
-        ).mappings().first()
-
-        # Subquery criteria
-        sub_criteria_rows = db.session.execute(
-            text(q.GET_SUBQUERY_CRITERIA),
-            {"sub_id": sub["id"]}
-        ).mappings().all()
-
-        subqueries.append({
-            "id": sub["id"],
-            "name": sub["name"],
-            "begin_date": str(sub["begin_date"]) if sub["begin_date"] else None,
-            "deleted": sub["deleted"],
-            "criteria": [dict(sc) for sc in sub_criteria_rows],
-            "join": dict(join_info) if join_info else {}
-        })
-
-    response = {
-        "id": result["id"],
-        "name": result["name"],
-        "description": result["description"],
-        "channel": result["channel"],
-        "begin_date": str(result["begin_date"]) if result["begin_date"] else None,
-        "deleted": result["deleted"],
-        "datasource_table": result["datasource"],
-        "criteria": criteria,
-        "subqueries": subqueries
-    }
-
-    if show_counts and result["tablename"]:
-        count_query = f"SELECT COUNT(*) FROM {result['tablename']} p"
-        try:
-            count = db.session.execute(text(count_query)).scalar()
-            response["counts"] = int(count)
-        except Exception as e:
-            response["counts"] = None
-
-    return response
-
-
-def save_campaign_criteria(campaign_id, criteria_list):
     for row in criteria_list:
+        row_id = row.get("row_id")
+        value = row.get("value")
+
+        if row_id is not None and str(row_id) == str(value):
+            continue  # Skip if value == row_id
+
         params = {
-            "campaign_id": campaign_id,
             "column_name": row.get("column_name"),
             "operator": row.get("operator"),
             "value": row.get("value"),
@@ -120,13 +83,14 @@ def save_campaign_criteria(campaign_id, criteria_list):
             params["id"] = row["row_id"]
             db.session.execute(text(q.SAVE_CRITERIA_UPDATE), params)
         else:
+            params["campaign_id"] = campaign_id
             db.session.execute(text(q.SAVE_CRITERIA_INSERT), params)
 
 
-def delete_criteria_row(campaign_id, row_id):
+
+def delete_criteria_row( row_id):
     db.session.execute(text(q.DELETE_CRITERIA_ROW), {
-        "id": row_id,
-        "campaign_id": campaign_id
+        "id": row_id
     })
 
 
@@ -754,11 +718,41 @@ def get_campaign_by_id(campaign_id):
     result = db.session.execute(text(q.GET_CAMPAIGN_BY_ID_SQL), {'id': campaign_id})
     return result.fetchone()
 
-def get_criteria_for_campaign(campaign_id):
-    criteria_rows = db.session.execute(
-        text(q.GET_CAMPAIGN_CRITERIA),
-        {"campaign_id": campaign_id}
-    ).mappings().all()
+def get_criteria_count(datasource, column, value):
+    if not datasource or not column or value is None:
+        return None
+
+    try:
+        sql = f"""
+                SELECT COUNT(*) FROM "{datasource}"
+                WHERE "{column}" = :value
+            """
+        count_result = db.session.execute(text(sql), {"value": value}).scalar()
+        return count_result
+
+    except Exception as e:
+        return None  # Skip this row
+
+def get_table_name_for_campaign(campaign_id):
+    row = db.session.execute(text(q.GET_DATASOURCE_CAMPAIGN_ID), {"cid": campaign_id}).mappings().first()
+    return row["tablename"] if row else None
+
+def get_criteria_for_campaign(campaign_id, show_counts=False, datasource=None):
+    try:
+        criteria_rows = db.session.execute(
+            text(q.GET_CAMPAIGN_CRITERIA),
+            {"campaign_id": campaign_id}
+        ).mappings().all()
+
+        table_row = db.session.execute(
+            text(q.GET_DATASOURCE_CAMPAIGN_ID),
+            {"cid": campaign_id}
+        ).mappings().first()
+        campaign_table = table_row["tablename"] if table_row else None
+    except Exception as e:
+        print(f"[ERROR] Failed loading campaign or table: {e}")
+        db.session.rollback()
+        return {"criteria": [], "subqueries": []}
 
     result = {
         "criteria": [],
@@ -771,43 +765,66 @@ def get_criteria_for_campaign(campaign_id):
         sql_type = row["sql_type"]
         sql_value = row["sql_value"]
         column_name = row["column_name"]
-        description = f"{column_name} {sql_type} {sql_value}" if sql_type else "None None None"
         is_or = row["or_next"]
-        subquery_campaign_id = None
+        description = f"{column_name} {sql_type} {sql_value}" if sql_type else "None None None"
+        count = None
 
-
-        # Check for in_sub/not_in_sub with numeric sql_value
+        # Handle in_sub / not_in_sub subquery rows
         if sql_type in ("in_sub", "not_in_sub") and str(sql_value).isdigit():
             subquery_campaign_id = int(sql_value)
 
-            # Fetch subquery campaign data once
             if subquery_campaign_id not in subquery_map:
-                sub_data = db.session.execute(
-                    text(q.GET_SUBQUERY_DETAILS),
-                    {"subquery_campaign_id": subquery_campaign_id}
-                ).mappings().first()
+                try:
+                    sub_data = db.session.execute(
+                        text(q.GET_SUBQUERY_DETAILS),
+                        {"subquery_campaign_id": subquery_campaign_id}
+                    ).mappings().first()
+
+                    sub_table_row = db.session.execute(
+                        text(q.GET_DATASOURCE_CAMPAIGN_ID),
+                        {"cid": subquery_campaign_id}
+                    ).mappings().first()
+                    sub_table = sub_table_row["tablename"] if sub_table_row else None
+                except Exception as e:
+                    print(f"[SKIP SUBQUERY] Error loading subquery campaign_id={subquery_campaign_id}: {e}")
+                    db.session.rollback()
+                    sub_data = None
+                    sub_table = None
 
                 if sub_data:
                     label = sub_data["label"]
-                    child_table = sub_data["child_table"]
-                    description = f" {label} {'in' if sql_type == 'in_sub' else 'not_in'}:{child_table} where"
+                    description = f"{label} {'in' if sql_type == 'in_sub' else 'not_in'}: {sub_table} where"
 
-                    # Fetch actual criteria of the subquery campaign
-                    sub_criteria_rows = db.session.execute(
-                        text(q.GET_CAMPAIGN_CRITERIA),
-                        {"campaign_id": subquery_campaign_id}
-                    ).mappings().all()
+                    try:
+                        sub_criteria_rows = db.session.execute(
+                            text(q.GET_CAMPAIGN_CRITERIA),
+                            {"campaign_id": subquery_campaign_id}
+                        ).mappings().all()
+                    except Exception as e:
+                        print(f"[SKIP SUBQUERY-CRITERIA] {e}")
+                        db.session.rollback()
+                        sub_criteria_rows = []
 
                     actual_sub_criteria = []
                     for sub_row in sub_criteria_rows:
                         sub_description = f"{sub_row['column_name']} {sub_row['sql_type']} {sub_row['sql_value']}" if sub_row['sql_type'] else "None None None"
+                        sub_count = None
+                        if show_counts and sub_row['column_name'] and sub_row['sql_value']:
+                            sub_count = get_criteria_count(
+                                datasource=sub_table,
+                                column=sub_row["column_name"],
+                                value=sub_row["sql_value"]
+                            )
+
                         actual_sub_criteria.append({
                             "id": sub_row["id"],
-                            "sql_type": sub_row["sql_type"],
+                            "operator": sub_row["sql_type"],
                             "sql_value": sub_row["sql_value"],
                             "position": sub_row["position"],
                             "description": sub_description,
-                            "column_name": sub_row["column_name"]
+                            "column_name": sub_row["column_name"],
+                            "is_or": sub_row["or_next"],
+                            "count": sub_count
                         })
 
                     subquery_map[subquery_campaign_id] = {
@@ -816,34 +833,47 @@ def get_criteria_for_campaign(campaign_id):
                         "criteria": actual_sub_criteria
                     }
 
-            # ✅ Still add the in_sub/not_in_sub row to top-level criteria with description
+            # ✅ Still include the top-level in_sub/not_in_sub row in response
+            if show_counts and column_name and sql_value and campaign_table:
+                count = get_criteria_count(
+                    datasource=campaign_table,
+                    column=column_name,
+                    value=sql_value
+                )
+
             result["criteria"].append({
                 "id": row["id"],
-                "sql_type": sql_type,
+                "operator": sql_type,
                 "sql_value": sql_value,
                 "position": row["position"],
                 "description": description,
                 "column_name": column_name,
-                "is_or": is_or
+                "is_or": is_or,
+                "count": count
             })
-            continue  # Continue after adding
+            continue
 
-        # Add to top-level criteria
+        # ✅ Normal criteria row
+        if show_counts and column_name and sql_value and campaign_table:
+            count = get_criteria_count(
+                datasource=campaign_table,
+                column=column_name,
+                value=sql_value
+            )
+
         result["criteria"].append({
             "id": row["id"],
-            "sql_type": sql_type,
+            "operator": sql_type,
             "sql_value": sql_value,
             "position": row["position"],
             "description": description,
             "column_name": column_name,
-            "is_or" : is_or
+            "is_or": is_or,
+            "count": count
         })
 
     result["subqueries"] = list(subquery_map.values())
     return result
-
-
-
 
 
 

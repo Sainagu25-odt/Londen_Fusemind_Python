@@ -8,7 +8,7 @@ from flask import request, jsonify, current_app, g, send_file
 from sqlalchemy.exc import SQLAlchemyError
 
 from models.campaigns import soft_delete_campaign, get_campaigns, undelete_campaign, \
-    get_campaign_edit_data, add_criterion, add_campaign, get_dropdowns_for_datasources, build_campaign_request_response, \
+    add_criterion, add_campaign, get_dropdowns_for_datasources, build_campaign_request_response, \
     insert_pull_list, get_global_active_pulls, get_campaign_counts, get_global_campaign_counts, \
     save_campaign_criteria, delete_criteria_row, get_campaign_record_data, copy_campaign, add_new_criteria_simple, \
     get_add_criteria_dropdowns, get_legend_values, get_subquery_dialog_options, create_subquery_campaign, \
@@ -74,70 +74,6 @@ class DeleteCampaign(Resource):
             return {'error': str(e)}, 500
 
 
-
-# # Request parser
-# edit_parser = reqparse.RequestParser()
-# edit_parser.add_argument("show_counts", type=int, default=0)
-#
-# # Criteria model
-# criteria_field = campaign_ns.model("Criterion", {
-#     "row_id": fields.Integer,
-#     "column_name": fields.String,
-#     "operator": fields.String,
-#     "value": fields.String,
-#     "is_or": fields.Boolean
-# })
-#
-# # Subquery join info
-# subquery_join_model = campaign_ns.model("SubqueryJoin", {
-#     "label": fields.String,
-#     "parent_table": fields.String,
-#     "child_table": fields.String,
-#     "parent_field": fields.String,
-#     "child_field": fields.String
-# })
-#
-# # Subquery model
-# subquery_model = campaign_ns.model("Subquery", {
-#     "id": fields.Integer,
-#     "name": fields.String,
-#     "begin_date": fields.String,
-#     "deleted": fields.Boolean,
-#     "criteria": fields.List(fields.Nested(criteria_field)),
-#     "join": fields.Nested(subquery_join_model)
-# })
-#
-# # Final edit response
-# edit_response = campaign_ns.model("EditCampaignResponse", {
-#     "id": fields.Integer,
-#     "name": fields.String,
-#     "description": fields.String,
-#     "channel": fields.String,
-#     "begin_date": fields.String,
-#     "deleted": fields.Boolean,
-#     "datasource_table": fields.String,
-#     "criteria": fields.List(fields.Nested(criteria_field)),
-#     "subqueries": fields.List(fields.Nested(subquery_model)),
-#     "counts": fields.Integer
-# })
-#
-# #edit campaign api
-# @campaign_ns.route("/<int:campaign_id>/edit")
-# @campaign_ns.doc(params={"show_counts": "Set to 1 to include counts"})
-# class EditCampaign(Resource):
-#     @token_required(current_app)
-#     @require_permission("cms")
-#     @campaign_ns.expect(edit_parser)
-#     @campaign_ns.marshal_with(edit_response)
-#     def get(self, campaign_id):
-#         args = edit_parser.parse_args()
-#         try:
-#             return get_campaign_edit_data(campaign_id, args["show_counts"])
-#         except Exception as e:
-#             current_app.logger.error(f"EditCampaign failed: {e}")
-#             return {"message": "Failed to retrieve campaign"}, 500
-
-
 campaign_model = campaign_ns.model('Campaign', {
     'id': fields.Integer,
     'name': fields.String,
@@ -150,11 +86,12 @@ campaign_model = campaign_ns.model('Campaign', {
 criterion_model = campaign_ns.model('Criterion', {
     'id': fields.Integer,
     'column_name': fields.String,
-    'sql_type': fields.String,
+    'operator': fields.String,
     'sql_value': fields.String,
     'position': fields.Integer,
     'description': fields.String,
-    "is_or": fields.Boolean
+    "is_or": fields.Boolean,
+    'count': fields.Integer
 
 })
 
@@ -174,6 +111,8 @@ edit_response_model = campaign_ns.model('EditCampaignResponse', {
 
 @campaign_ns.route('/<int:campaign_id>/edit')
 class CampaignEditResource(Resource):
+    @token_required(current_app)
+    @require_permission("cms")
     @campaign_ns.doc(params={
         'show_counts': 'Optional flag to show step counts'
     })
@@ -187,7 +126,7 @@ class CampaignEditResource(Resource):
         else:
             campaign = {'id': None, 'name': '', 'subquery': False, 'datasource': ''}
 
-        criteria_data = get_criteria_for_campaign(campaign_id)
+        criteria_data = get_criteria_for_campaign(campaign_id, show_counts=bool(show_counts), datasource=campaign["datasource"])
 
         return {
             'campaign': campaign,
@@ -214,12 +153,9 @@ class SaveCampaign(Resource):
     def post(self, campaign_id):
         try:
             data = request.get_json()
-            criteria_list = data.get("criteria", [])
-
-            if not isinstance(criteria_list, list):
-                return {"message": "Invalid data format for criteria"}, 400
-
-            save_campaign_criteria(campaign_id, criteria_list)
+            if not isinstance(data, dict):
+                return {"message": "Invalid data format"}, 400
+            save_campaign_criteria(campaign_id, data)
             db.session.commit()
             return {"message": "Campaign criteria saved successfully"}, 200
 
@@ -232,13 +168,13 @@ class SaveCampaign(Resource):
             return {"message": "Unexpected error", "error": str(e)}, 500
 
 # delete criteria with id
-@campaign_ns.route('/<int:campaign_id>/deleteCriteria/<int:row_id>')
+@campaign_ns.route('/deleteCriteria/<int:row_id>')
 class DeleteCriterion(Resource):
     @token_required(current_app)
     @require_permission("cms")
-    def get(self, campaign_id, row_id):
+    def get(self,  row_id):
         try:
-            delete_criteria_row(campaign_id, row_id)
+            delete_criteria_row(row_id)
             db.session.commit()
             return {"message": f"Criterion row {row_id} deleted successfully"}, 200
 
