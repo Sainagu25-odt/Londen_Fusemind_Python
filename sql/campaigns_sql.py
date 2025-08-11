@@ -398,6 +398,12 @@ ORDER BY total DESC
 LIMIT 100
 """
 
+GET_LEGEND_VALUES = """
+SELECT * FROM frequent_value
+WHERE tablename = :tablename AND columnname = :columnname
+ORDER BY position ASC
+"""
+
 GET_DATASOURCE = """
 SELECT datasource FROM campaigns WHERE id =:cid
 """
