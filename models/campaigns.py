@@ -589,14 +589,14 @@ OPERATORS = [
     {"key": "not_equal", "label": "Not Equal"},
     {"key": "contains", "label": "Contains"},
     {"key": "does_not_contain", "label": "Does Not Contain"},
-    {"key": "greater_than", "label": "Greater Than"},
-    {"key": "less_than", "label": "Less Than"},
-    {"key": "equals_field", "label": "Equals Field"},
-    {"key": "not_equal_field", "label": "Not Equal Field"},
-    {"key": "greater_than_field", "label": "Greater Than Field"},
-    {"key": "less_than_field", "label": "Less Than Field"},
-    {"key": "in_comma_separated_field", "label": "IN Comma Separated Field"},
-    {"key": "not_in_comma_separated_field", "label": "Not In Comma Separated Field"},
+    {"key": "greater", "label": "Greater Than"},
+    {"key": "less", "label": "Less Than"},
+    {"key": "column_equals", "label": "Equals Field"},
+    {"key": "column_not_equal", "label": "Not Equal Field"},
+    {"key": "column_greater", "label": "Greater Than Field"},
+    {"key": "column_less", "label": "Less Than Field"},
+    {"key": "in", "label": "IN Comma Separated Field"},
+    {"key": "not_in", "label": "Not In Comma Separated Field"},
     {"key": "is_empty", "label": "Is Empty"},
     {"key": "not_empty", "label": "Not Empty"},
 ]
@@ -645,6 +645,21 @@ def get_legend_values(campaign_id, column):
     ]
     return result
 
+
+def get_campaign_columns(campaign_id):
+    result = db.session.execute(text(q.GET_DATASOURCE_CAMPAIGN_ID), {"cid": campaign_id}).fetchone()
+    if not result:
+        return []
+    table_name = result[0]
+    print(table_name)
+    sql = text(q.GET_COLUMNS_SQL)
+    result = db.session.execute(sql, {'table': table_name})
+    print(result)
+    columns = [r[0] for r in result.fetchall()]
+    print(columns)
+    # Return as dict {column: humanized name}
+    return columns
+
 def get_subquery_dialog_options(campaign_id : int):
     result = db.session.execute(text(q.GET_DATASOURCE), {"cid": campaign_id}).fetchone()
     if not result:
@@ -665,7 +680,7 @@ def get_subquery_dialog_options(campaign_id : int):
             label_names.append(label_value)
     return {
         "table": table_names,
-        "operator" : ["In", "Not In"],
+        "operator" : ["in", "not in"],
         "label": label_names
     }
 
@@ -727,6 +742,7 @@ def get_criteria_count(datasource, column, value):
                 SELECT COUNT(*) FROM "{datasource}"
                 WHERE "{column}" = :value
             """
+        print(sql)
         count_result = db.session.execute(text(sql), {"value": value}).scalar()
         return count_result
 
@@ -762,6 +778,7 @@ def get_criteria_for_campaign(campaign_id, show_counts=False, datasource=None):
     subquery_map = {}
 
     for row in criteria_rows:
+        print(row)
         sql_type = row["sql_type"]
         sql_value = row["sql_value"]
         column_name = row["column_name"]

@@ -12,7 +12,7 @@ from models.campaigns import soft_delete_campaign, get_campaigns, undelete_campa
     insert_pull_list, get_global_active_pulls, get_campaign_counts, get_global_campaign_counts, \
     save_campaign_criteria, delete_criteria_row, get_campaign_record_data, copy_campaign, add_new_criteria_simple, \
     get_add_criteria_dropdowns, get_legend_values, get_subquery_dialog_options, create_subquery_campaign, \
-    get_campaign_by_id, get_criteria_for_campaign
+    get_campaign_by_id, get_criteria_for_campaign, get_campaign_columns
 from extensions import db
 from sqlalchemy import text
 
@@ -111,8 +111,8 @@ edit_response_model = campaign_ns.model('EditCampaignResponse', {
 
 @campaign_ns.route('/<int:campaign_id>/edit')
 class CampaignEditResource(Resource):
-    @token_required(current_app)
-    @require_permission("cms")
+    # @token_required(current_app)
+    # @require_permission("cms")
     @campaign_ns.doc(params={
         'show_counts': 'Optional flag to show step counts'
     })
@@ -512,6 +512,21 @@ class LegendResource(Resource):
             return {"status": "ok", "data": values}, 200
         except Exception as e:
             return {"error" : str(e)}, 500
+
+@campaign_ns.route("/columnLegend")
+class ColumnLegendResource(Resource):
+    def post(self):
+        try:
+            data = request.get_json()
+            if "cid" not in data:
+                return {"status": "error", "message": "'cid' is required"}, 400
+            columns = get_campaign_columns(data["cid"])
+            return {"column" : columns}, 200
+        except Exception as e:
+            return {"error" : str(e)}, 500
+
+
+
 
 subquery_dialog_response = campaign_ns.model('SubqueryDialogResponse', {
     'status': fields.String,
