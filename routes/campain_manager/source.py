@@ -488,7 +488,7 @@ class CriteriaDropdownsResource(Resource):
 # Nested model for each legend item
 legend_item = campaign_ns.model('LegendItem', {
     'value': fields.String,
-    'total': fields.Integer
+    'position': fields.Integer
 })
 
 legend_response = campaign_ns.model('LegendResponse', {

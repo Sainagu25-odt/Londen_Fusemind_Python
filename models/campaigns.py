@@ -624,27 +624,20 @@ def get_add_criteria_dropdowns(campaign_id : int):
 
 
 def get_legend_values(campaign_id, column):
-
     result= db.session.execute(text(q.GET_DATASOURCE_CAMPAIGN_ID), {"cid": campaign_id}).fetchone()
     if not result:
         return []
     table_name = result[0]
-
-    legend_sql = q.GET_LEGEND_VALUES_SQL.format(
-        column=column,
-        table_name=table_name
-    )
-
-    rows = db.session.execute(text(legend_sql)).fetchall()
+    sql = text(q.GET_LEGEND_VALUES)
+    rows= db.session.execute(sql, {'tablename': table_name, 'columnname': column})
     result = [
         {
             "value": str(row[0]) if row[0] is not None else "",
-            "total": int(row[1])
+            "position" : int(row[1])
         }
         for row in rows
     ]
     return result
-
 
 def get_campaign_columns(campaign_id):
     result = db.session.execute(text(q.GET_DATASOURCE_CAMPAIGN_ID), {"cid": campaign_id}).fetchone()
@@ -733,19 +726,80 @@ def get_campaign_by_id(campaign_id):
     result = db.session.execute(text(q.GET_CAMPAIGN_BY_ID_SQL), {'id': campaign_id})
     return result.fetchone()
 
-def get_criteria_count(datasource, column, value):
+def get_criteria_count(datasource, column, operator, value):
     if not datasource or not column or value is None:
         return None
 
     try:
-        sql = f"""
-                SELECT COUNT(*) FROM "{datasource}"
-                WHERE "{column}" = :value
-            """
-        print(sql)
-        count_result = db.session.execute(text(sql), {"value": value}).scalar()
-        return count_result
+        sql = None
+        params = {}
 
+        if operator == "equals":
+            sql = f'SELECT COUNT(*) FROM "{datasource}" WHERE "{column}" = :value'
+            params = {"value": value}
+
+        elif operator == "not_equal":
+            sql = f'SELECT COUNT(*) FROM "{datasource}" WHERE "{column}" <> :value'
+            params = {"value": value}
+
+        elif operator == "contains":
+            sql = f'SELECT COUNT(*) FROM "{datasource}" WHERE "{column}"::text ILIKE :value'
+            params = {"value": f"%{value}%"}
+
+
+        elif operator == "does_not_contain":
+            sql = f'SELECT COUNT(*) FROM "{datasource}" WHERE "{column}"::text NOT ILIKE :value'
+            params = {"value": f"%{value}%"}
+
+        elif operator == "greater":
+            sql = f'SELECT COUNT(*) FROM "{datasource}" WHERE "{column}" > :value'
+            params = {"value": value}
+
+        elif operator == "less":
+            sql = f'SELECT COUNT(*) FROM "{datasource}" WHERE "{column}" < :value'
+            params = {"value": value}
+
+        elif operator == "column_equals":
+            sql = f'SELECT COUNT(*) FROM "{datasource}" WHERE "{column}" = "{value}"'
+
+        elif operator == "column_not_equal":
+            sql = f'SELECT COUNT(*) FROM "{datasource}" WHERE "{column}" <> "{value}"'
+
+        elif operator == "column_greater":
+            sql = f'SELECT COUNT(*) FROM "{datasource}" WHERE "{column}" > "{value}"'
+
+        elif operator == "column_less":
+            sql = f'SELECT COUNT(*) FROM "{datasource}" WHERE "{column}" < "{value}"'
+
+        elif operator == "in":
+            if isinstance(value, str):
+                vals = tuple(v.strip() for v in value.split(",") if v.strip())
+            elif isinstance(value, (list, tuple)):
+                vals = tuple(value)
+            else:
+                vals = (value,)
+            sql = f'SELECT COUNT(*) FROM "{datasource}" WHERE "{column}" IN :vals'
+            params = {"vals": vals}
+
+        elif operator == "not_in":
+            if isinstance(value, str):
+                vals = tuple(v.strip() for v in value.split(",") if v.strip())
+            elif isinstance(value, (list, tuple)):
+                vals = tuple(value)
+            else:
+                vals = (value,)
+            sql = f'SELECT COUNT(*) FROM "{datasource}" WHERE "{column}" NOT IN :vals'
+            params = {"vals": vals}
+
+        elif operator == "is_empty":
+            sql = f'SELECT COUNT(*) FROM "{datasource}" WHERE "{column}" IS NULL OR "{column}"::text = \'\''
+
+        elif operator == "not_empty":
+            sql = f'SELECT COUNT(*) FROM "{datasource}" WHERE "{column}" IS NOT NULL AND "{column}"::text <> \'\''
+
+        result = db.session.execute(text(sql), params)
+        count = result.scalar()
+        return count
     except Exception as e:
         return None  # Skip this row
 
@@ -759,7 +813,6 @@ def get_criteria_for_campaign(campaign_id, show_counts=False, datasource=None):
             text(q.GET_CAMPAIGN_CRITERIA),
             {"campaign_id": campaign_id}
         ).mappings().all()
-
         table_row = db.session.execute(
             text(q.GET_DATASOURCE_CAMPAIGN_ID),
             {"cid": campaign_id}
@@ -778,7 +831,6 @@ def get_criteria_for_campaign(campaign_id, show_counts=False, datasource=None):
     subquery_map = {}
 
     for row in criteria_rows:
-        print(row)
         sql_type = row["sql_type"]
         sql_value = row["sql_value"]
         column_name = row["column_name"]
@@ -830,6 +882,7 @@ def get_criteria_for_campaign(campaign_id, show_counts=False, datasource=None):
                             sub_count = get_criteria_count(
                                 datasource=sub_table,
                                 column=sub_row["column_name"],
+                                operator=sub_row["sql_type"],
                                 value=sub_row["sql_value"]
                             )
 
@@ -849,14 +902,7 @@ def get_criteria_for_campaign(campaign_id, show_counts=False, datasource=None):
                         "subquery_name": sub_data["name"],
                         "criteria": actual_sub_criteria
                     }
-
-            # ✅ Still include the top-level in_sub/not_in_sub row in response
-            if show_counts and column_name and sql_value and campaign_table:
-                count = get_criteria_count(
-                    datasource=campaign_table,
-                    column=column_name,
-                    value=sql_value
-                )
+            count = None
 
             result["criteria"].append({
                 "id": row["id"],
@@ -875,6 +921,7 @@ def get_criteria_for_campaign(campaign_id, show_counts=False, datasource=None):
             count = get_criteria_count(
                 datasource=campaign_table,
                 column=column_name,
+                operator=sql_type,
                 value=sql_value
             )
 

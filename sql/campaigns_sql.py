@@ -390,16 +390,8 @@ WHERE table_schema = 'public'
 ORDER BY column_name
 """
 
-GET_LEGEND_VALUES_SQL = """
-SELECT {column} AS value, COUNT(*) AS total
-FROM {table_name}
-GROUP BY {column}
-ORDER BY total DESC
-LIMIT 100
-"""
-
 GET_LEGEND_VALUES = """
-SELECT * FROM frequent_value
+SELECT name, position FROM frequent_value
 WHERE tablename = :tablename AND columnname = :columnname
 ORDER BY position ASC
 """
