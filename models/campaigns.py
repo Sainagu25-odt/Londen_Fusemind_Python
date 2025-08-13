@@ -773,22 +773,22 @@ def get_criteria_count(datasource, column, operator, value):
 
         elif operator == "in":
             if isinstance(value, str):
-                vals = tuple(v.strip() for v in value.split(",") if v.strip())
+                vals = [v.strip() for v in value.split(",") if v.strip()]
             elif isinstance(value, (list, tuple)):
-                vals = tuple(value)
+                vals = list(value)
             else:
-                vals = (value,)
-            sql = f'SELECT COUNT(*) FROM "{datasource}" WHERE "{column}" IN :vals'
+                vals = [value]
+            sql = f'SELECT COUNT(*) FROM "{datasource}" WHERE "{column}"::text  = ANY(:vals)'
             params = {"vals": vals}
 
         elif operator == "not_in":
             if isinstance(value, str):
-                vals = tuple(v.strip() for v in value.split(",") if v.strip())
+                vals = [v.strip() for v in value.split(",") if v.strip()]
             elif isinstance(value, (list, tuple)):
-                vals = tuple(value)
+                vals = list(value)
             else:
-                vals = (value,)
-            sql = f'SELECT COUNT(*) FROM "{datasource}" WHERE "{column}" NOT IN :vals'
+                vals = [value]
+            sql = f'SELECT COUNT(*) FROM "{datasource}" WHERE "{column}"::text <> ALL(:vals)'
             params = {"vals": vals}
 
         elif operator == "is_empty":
@@ -799,9 +799,13 @@ def get_criteria_count(datasource, column, operator, value):
 
         result = db.session.execute(text(sql), params)
         count = result.scalar()
+        print(f"[COUNT] SQL: {sql} | Params: {params} | Count: {count}")
         return count
     except Exception as e:
+        print(f"[ERROR] get_criteria_count failed for datasource={datasource}, column={column}, operator={operator}, value={value} -> {e}")
+        db.session.rollback()  # important! clears the failed transaction
         return None  # Skip this row
+
 
 def get_table_name_for_campaign(campaign_id):
     row = db.session.execute(text(q.GET_DATASOURCE_CAMPAIGN_ID), {"cid": campaign_id}).mappings().first()
@@ -862,7 +866,8 @@ def get_criteria_for_campaign(campaign_id, show_counts=False, datasource=None):
 
                 if sub_data:
                     label = sub_data["label"]
-                    description = f"{label} {'in' if sql_type == 'in_sub' else 'not_in'}: {sub_table} where"
+                    table = sub_data["child_table"]
+                    description = f"{label.title()} {'in' if sql_type == 'in_sub' else 'not in'}: {table.title()} Where"
 
                     try:
                         sub_criteria_rows = db.session.execute(
@@ -915,6 +920,8 @@ def get_criteria_for_campaign(campaign_id, show_counts=False, datasource=None):
                 "count": count
             })
             continue
+        print(f"[DEBUG] Checking counts for {row['id']} | table={campaign_table} | column={column_name} | value={sql_value}")
+
 
         # ✅ Normal criteria row
         if show_counts and column_name and sql_value and campaign_table:
