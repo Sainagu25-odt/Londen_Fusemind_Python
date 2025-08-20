@@ -141,7 +141,7 @@ WHERE token = :token
 """
 
 GET_CAMPAIGN_DETAILS_BY_ID = """
-SELECT id, name, channel, datasource FROM campaigns WHERE id = :campaign_id
+SELECT id, name, channel FROM campaigns WHERE id = :campaign_id
 """
 
 

@@ -10,10 +10,25 @@ from routes.responsers_file.source import responder_ns
 from routes.dashboard.source import dashboard_ns
 from routes.user_admin.source import user_ns
 
-# Load config
-config_path = os.path.join(os.path.dirname(__file__), 'config.yml')
+# 1. Optionally load .env
+try:
+    from dotenv import load_dotenv
+    load_dotenv()
+except ImportError:
+    pass
+
+config_path = os.getenv('APP_CONFIG_PATH')
+
+
+if not config_path or not os.path.exists(config_path):
+    raise FileNotFoundError(
+        f"APP_CONFIG_PATH is not set or file does not exist: {config_path}\n"
+        "Set APP_CONFIG_PATH to point to your config.yml file."
+    )
+
 with open(config_path, 'r') as f:
     config = yaml.safe_load(f)
+
 
 # Initialize app
 app = Flask(__name__)
@@ -40,4 +55,6 @@ api.add_namespace(responder_ns, path='/api/responders')
 
 # Run
 if __name__ == '__main__':
+    debug_mode = os.getenv("FLASK_ENV") == "development"
+    print(f"[APP] Starting Flask server (debug={debug_mode})")
     app.run(host='0.0.0.0', port=5000, debug=True)
