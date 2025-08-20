@@ -141,7 +141,7 @@ WHERE token = :token
 """
 
 GET_CAMPAIGN_DETAILS_BY_ID = """
-SELECT id, name, channel FROM campaigns WHERE id = :campaign_id
+SELECT id, name, channel, datasource FROM campaigns WHERE id = :campaign_id
 """
 
 
@@ -158,10 +158,9 @@ SELECT column_name FROM campaign_criteria WHERE campaign_id = :campaign_id
 
 # Previous pulls for this campaign
 GET_PREVIOUS_PULLS_BY_CAMPAIGN = """
-SELECT name, requested_at, requested_by, householding, every_n, num_records
+SELECT id, name, requested_at, requested_by, householding, every_n, num_records
 FROM campaign_lists
 WHERE campaign_id = :campaign_id
-AND completed_at IS NOT NULL
 ORDER BY requested_at DESC
 """
 
@@ -173,9 +172,10 @@ SELECT cl.id AS list_id, c.name AS campaign, cl.name,
     cl.requested_at,
     cl.completed_at, cl.householding, cl.every_n, cl.num_records
 FROM campaign_lists cl
-JOIN campaigns c ON c.id = cl.campaign_id
-AND cl.completed_at IS NULL
-ORDER BY cl.requested_at DESC
+JOIN campaigns c ON cl.campaign_id = c.id
+WHERE cl.requested_at > :since_date
+AND c.deleted_at IS NULL
+ORDER BY cl.id ASC
 """
 
 GET_LATEST_PULL_SETTINGS = """
