@@ -180,15 +180,14 @@ def build_campaign_request_response(campaign_id, user):
     now = datetime.now()
     day = now.day  # This gives day without leading zero on all platforms
     list_title = f"{campaign['channel']} {campaign['name']} {now.strftime('%b')} {day}, {now.strftime('%Y %I:%M:%S%p').lower()}"
-
     # Prebuilt fieldsets based on datasource of campaign
     fieldsets = db.session.execute(text(GET_PREBUILT_FIELDSETS_BY_CAMPAIGN), {'campaign_id': campaign_id}).fetchall()
     prebuilt_fieldsets = [dict(row._mapping) for row in fieldsets]
 
-    # Campaign columns (custom fields)
-    columns = db.session.execute(text(GET_CAMPAIGN_COLUMNS_BY_ID), {'campaign_id': campaign_id}).fetchall()
-
-    campaign_columns = list({row[0] for row in columns if row[0] is not None})
+    # # Campaign columns (custom fields)
+    result = db.session.execute(text(q.GET_DATASOURCE_CAMPAIGN_ID), {"cid": campaign_id}).fetchone()
+    columns = db.session.execute(text(q.GET_COLUMNS_SQL), {"table": result[0]}).fetchall()
+    campaign_columns = [row[0] for row in columns]
 
     # Build all retrieval method “radio” options
     retrieval_options = get_retrieval_methods()
@@ -197,8 +196,10 @@ def build_campaign_request_response(campaign_id, user):
     previous_pulls = get_previous_pulls(campaign_id)
 
     # get active pulls
+    one_year_ago = datetime.now() - timedelta(days=365)
+
     act_pulls = db.session.execute(
-        text(GET_ACTIVE_PULLS_BY_CAMPAIGN)).mappings().fetchall()
+        text(GET_ACTIVE_PULLS_BY_CAMPAIGN), {"since_date": one_year_ago}).mappings().fetchall()
 
     active_pulls = []
     for r in act_pulls:

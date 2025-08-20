@@ -111,8 +111,8 @@ edit_response_model = campaign_ns.model('EditCampaignResponse', {
 
 @campaign_ns.route('/<int:campaign_id>/edit')
 class CampaignEditResource(Resource):
-    # @token_required(current_app)
-    # @require_permission("cms")
+    @token_required(current_app)
+    @require_permission("cms")
     @campaign_ns.doc(params={
         'show_counts': 'Optional flag to show step counts'
     })
@@ -524,8 +524,6 @@ class ColumnLegendResource(Resource):
             return {"column" : columns}, 200
         except Exception as e:
             return {"error" : str(e)}, 500
-
-
 
 
 subquery_dialog_response = campaign_ns.model('SubqueryDialogResponse', {
