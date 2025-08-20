@@ -280,7 +280,9 @@ def insert_pull_list(args, current_user):
         db.session.commit()
 
         # return just inserted pull as active
-        rows = db.session.execute(text(GET_ACTIVE_PULLS_BY_CAMPAIGN)).mappings().fetchall()
+        one_year_ago = datetime.now() - timedelta(days=365)
+        rows = db.session.execute(
+            text(GET_ACTIVE_PULLS_BY_CAMPAIGN), {"since_date": one_year_ago}).mappings().fetchall()
         return {"active_pulls": _build_pull_response(rows)}
     except Exception as e:
         db.session.rollback()
@@ -288,7 +290,9 @@ def insert_pull_list(args, current_user):
 
 def get_global_active_pulls():
     try:
-        rows = db.session.execute(text(GET_ACTIVE_PULLS_BY_CAMPAIGN)).mappings().fetchall()
+        one_year_ago = datetime.now() - timedelta(days=365)
+        rows = db.session.execute(
+            text(GET_ACTIVE_PULLS_BY_CAMPAIGN), {"since_date": one_year_ago}).mappings().fetchall()
         return {"active_pulls": _build_pull_response(rows)}
     except Exception as e:
         raise e
