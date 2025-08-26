@@ -1,6 +1,7 @@
 import logging
 import os
 import re
+import tempfile
 
 from flask_restx import Namespace, Resource, fields, reqparse
 
@@ -19,10 +20,13 @@ from sqlalchemy import text
 from routes.campain_manager.dropdown_service import get_criteria_options
 from routes.campain_manager.schema import campaign_edit_response, criteria_model, \
     pull_item_model, active_pulls_response_model, pull_request_parser, \
-    campaign_response, counts_response, add_criteria_response
+    campaign_response, counts_response, add_criteria_response, pull_request_model, campaign_list_model
 from sql.campaigns_sql import GET_CAMPAIGN_LIST_FILENAME
 from utils.auth import require_permission
 from utils.token import token_required
+
+import pandas as pd
+import io
 
 # Define the namespace
 campaign_ns = Namespace('campaigns', description='Campaign related operations')
@@ -111,8 +115,8 @@ edit_response_model = campaign_ns.model('EditCampaignResponse', {
 
 @campaign_ns.route('/<int:campaign_id>/edit')
 class CampaignEditResource(Resource):
-    @token_required(current_app)
-    @require_permission("cms")
+    # @token_required(current_app)
+    # @require_permission("cms")
     @campaign_ns.doc(params={
         'show_counts': 'Optional flag to show step counts'
     })
@@ -290,16 +294,20 @@ class CampaignPullRequest(Resource):
 
 campaign_ns.models[pull_item_model.name] = pull_item_model
 campaign_ns.models[active_pulls_response_model.name] = active_pulls_response_model
+campaign_ns.models[pull_request_model.name] = pull_request_model
+campaign_ns.models[campaign_list_model.name] = campaign_list_model
 
 @campaign_ns.route("/pull")
 class PullInsert(Resource):
     @token_required(current_app)
-    @require_permission("cms")
-    @campaign_ns.expect(pull_request_parser)
+    # @require_permission("cms")
+    @campaign_ns.expect(pull_request_model)
     @campaign_ns.marshal_with(active_pulls_response_model)
-    def get(self):
-        args = pull_request_parser.parse_args()
+    def post(self):
+        args = request.json or {}
+        print(args)
         try:
+            print(g.current_user)
             return insert_pull_list(args, g.current_user), 200
         except ValueError as ve:
             current_app.logger.warning(f"Validation error: {str(ve)}")
@@ -568,6 +576,154 @@ class NewSubqueryResource(Resource):
             return {"error" : str(e)}, 500
 
 
+def get_campaign_by_name_case_insensitive(name: str):
+    sql = "SELECT * FROM campaigns WHERE LOWER(name) = LOWER(:name) LIMIT 1"
+    result = db.session.execute(text(sql), {"name": name}).first()
+    if result:
+        return dict(result._mapping)  # convert Row to dict
+    return None
+
+@campaign_ns.route('/<int:campaign_id>/download')
+class CampaignDownloadResource(Resource):
+    def get(self, campaign_id):
+        show_counts = int(request.args.get('show_counts', 1))
+
+        # --- Fetch campaign ---
+        campaign = get_campaign_by_id(campaign_id)
+        if campaign:
+            campaign = dict(campaign._mapping)
+        else:
+            return {"error": "Campaign not found"}, 404
+
+        base_name = campaign['name']
+        counterpart_names = [f"{base_name} Spanish", f"Spanish {base_name}"]
+
+        spanish_campaign = None
+        for cname in counterpart_names:
+            spanish_campaign = get_campaign_by_name_case_insensitive(cname)
+            if spanish_campaign:
+                break
+
+        # --- Fetch criteria for English campaign ---
+        criteria_data = get_criteria_for_campaign(
+            campaign_id,
+            show_counts=bool(show_counts),
+            datasource=campaign.get("datasource")
+        )
+
+        all_criteria = []
+
+        # English campaign criteria
+        for c in criteria_data["criteria"]:
+            all_criteria.append({
+                "Description": c.get("description"),
+                "is_or": "OR" if c.get("is_or") else "AND",
+                "ENGLISH": c.get("count"),
+                "SPANISH": None
+            })
+
+        # English subqueries
+        for sub in criteria_data.get("subqueries", []):
+            for c in sub.get("criteria", []):
+                all_criteria.append({
+                    "Description": c.get("description"),
+                    "is_or": "OR" if c.get("is_or") else "AND",
+                    "ENGLISH": c.get("count"),
+                    "SPANISH": None
+                })
+
+        # --- If Spanish campaign exists, fetch its criteria ---
+        if spanish_campaign:
+            spanish_criteria_data = get_criteria_for_campaign(
+                spanish_campaign['id'],
+                show_counts=bool(show_counts),
+                datasource=spanish_campaign.get("datasource")
+            )
+
+            spanish_rows = []
+            for c in spanish_criteria_data["criteria"]:
+                spanish_rows.append({
+                    "description": c.get("description"),
+                    "SPANISH": c.get("count")
+                })
+            for sub in spanish_criteria_data.get("subqueries", []):
+                for c in sub.get("criteria", []):
+                    spanish_rows.append({
+                        "description": c.get("description"),
+                        "SPANISH": c.get("count")
+                    })
+
+            # Match by description
+            for row in all_criteria:
+                for s_row in spanish_rows:
+                    if row["Description"] == s_row["description"]:
+                        row["SPANISH"] = s_row["SPANISH"]
+                        break
+
+        # --- Convert to DataFrame ---
+        df_criteria = pd.DataFrame(all_criteria)
+
+        # --- Create Excel in memory ---
+        output = io.BytesIO()
+        with pd.ExcelWriter(output, engine='xlsxwriter') as writer:
+            startrow = 2
+            df_criteria.to_excel(writer, sheet_name='Campaign_Data', index=False, startrow=startrow)
+
+            workbook = writer.book
+            worksheet = writer.sheets['Campaign_Data']
+
+            # Styles
+            campaign_format = workbook.add_format({
+                'bold': True,
+                'font_size': 13,
+                'align': 'left',
+                'valign': 'top',
+                'text_wrap': True,
+                'border': 1
+            })
+            header_format = workbook.add_format({
+                'bold': True,
+                'border': 1,
+                'align': 'center',
+                'valign': 'vcenter'
+            })
+            data_format = workbook.add_format({'border': 1})
+
+            # Merge campaign name
+            num_cols = len(df_criteria.columns)
+            worksheet.merge_range(0, 0, 0, num_cols - 1,
+                                  f"Campaign_name : {campaign['name']}", campaign_format)
+
+            # Header formatting
+            for col_num, col_name in enumerate(df_criteria.columns.tolist()):
+                worksheet.write(startrow, col_num, col_name, header_format)
+
+            # Data formatting
+            nrows, ncols = df_criteria.shape
+            for r in range(nrows):
+                for c in range(ncols):
+                    val = df_criteria.iat[r, c]
+                    if pd.isna(val):
+                        worksheet.write_blank(startrow + 1 + r, c, None, data_format)
+                    else:
+                        worksheet.write(startrow + 1 + r, c, val, data_format)
+
+            # Auto column widths
+            for i, col in enumerate(df_criteria.columns):
+                max_len = max(len(str(col)), df_criteria[col].dropna().astype(str).map(len).max()) + 2
+                worksheet.set_column(i, i, max_len)
+
+        # Reset buffer pointer
+        output.seek(0)
+
+        filename = f"campaign_{campaign_id}_export.xlsx"
+
+        return send_file(
+            output,
+            mimetype='application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+            as_attachment=True,
+            download_name=filename
+        )
 
 
 

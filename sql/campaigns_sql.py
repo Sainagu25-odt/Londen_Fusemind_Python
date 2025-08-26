@@ -141,15 +141,29 @@ WHERE token = :token
 """
 
 GET_CAMPAIGN_DETAILS_BY_ID = """
-SELECT id, name, channel FROM campaigns WHERE id = :campaign_id
+SELECT id, name, channel, datasource FROM campaigns WHERE id = :campaign_id
+"""
+
+INSERT_NEW_FIELDSET = """
+INSERT INTO campaign_list_fieldsets (label, datasource)
+VALUES (:label, :datasource)
+RETURNING id
+"""
+
+INSERT_FIELDSET_FIELD = """
+INSERT INTO campaign_list_fieldset_fields (fieldset_id, field)
+VALUES (:fieldset_id, :field)
 """
 
 
-GET_PREBUILT_FIELDSETS_BY_CAMPAIGN = """
-SELECT id, label FROM campaign_list_fieldsets
-WHERE datasource = (
-    SELECT datasource FROM campaigns WHERE id = :campaign_id
-)
+INSERT_CAMPAIGN_LIST = """
+INSERT INTO campaign_lists 
+(campaign_id, requested_at, completed_at, fieldset_id, every_n, num_records, fields,
+ requested_by, request_email, excluded_pulls, householding, name)
+VALUES 
+(:campaign_id, :requested_at, :completed_at, :fieldset_id, :every_n, :num_records, :fields,
+ :requested_by, :request_email, :excluded_pulls, :householding, :name)
+RETURNING id
 """
 
 GET_CAMPAIGN_COLUMNS_BY_ID = """

@@ -94,4 +94,28 @@ subquery_dialog_response = Model('SubqueryDialogResponse', {
 
 
 
+campaign_list_model = Model("CampaignListPayload", {
+    "id": fields.String(required=False, description="Pull ID, blank for new"),
+    "campaign_id": fields.Integer(required=True, description="Campaign ID"),
+    "name": fields.String(required=False, description="Pull name"),
+    "fieldset_id": fields.Integer(required=False, description="Fieldset ID"),
+    "householding": fields.Integer(required=False, description="1 or 0"),
+    "every_n": fields.Integer(required=False, description="Every N records"),
+    "num_records": fields.Integer(required=False, description="Number of records"),
+    "fields": fields.String(required=False, description="Comma-separated fields"),
+    "record_retrieval": fields.String(required=False, description="every_n or num_records"),
+    "request_email": fields.String(required=False),
+    "requested_by": fields.String(required=False),
+    "excluded_pulls": fields.String(required=False)
+})
+
+pull_request_model = Model("CampaignRequestPayload", {
+    "campaign_list": fields.Nested(campaign_list_model, required=True),
+    "fieldset_type": fields.String(required=True, description="new or existing"),
+    "fieldset_name": fields.String(required=False, description="Only if new"),
+    "fieldset_selected_fields": fields.String(required=False, description="Comma-separated fields for new fieldset")
+})
+
+
+
 
