@@ -144,6 +144,13 @@ GET_CAMPAIGN_DETAILS_BY_ID = """
 SELECT id, name, channel, datasource FROM campaigns WHERE id = :campaign_id
 """
 
+GET_PREBUILT_FIELDSETS_BY_CAMPAIGN = """
+SELECT id, label FROM campaign_list_fieldsets
+WHERE datasource = (
+    SELECT datasource FROM campaigns WHERE id = :campaign_id
+)
+"""
+
 INSERT_NEW_FIELDSET = """
 INSERT INTO campaign_list_fieldsets (label, datasource)
 VALUES (:label, :datasource)
@@ -189,7 +196,7 @@ FROM campaign_lists cl
 JOIN campaigns c ON cl.campaign_id = c.id
 WHERE cl.requested_at > :since_date
 AND c.deleted_at IS NULL
-ORDER BY cl.id ASC
+ORDER BY cl.id DESC
 """
 
 GET_LATEST_PULL_SETTINGS = """
@@ -467,5 +474,13 @@ SELECT c.id, c.name, cs.id AS subquery_id, cs.label, cs.child_table
 FROM campaigns c
 JOIN campaign_subqueries cs ON cs.id = c.campaign_subquery_id
 WHERE c.id = :subquery_campaign_id;
+"""
+
+
+SUBQUERY_REF_SQL = """
+SELECT * FROM campaign_criteria
+WHERE campaign_id = :campaign_id
+AND sql_type IN ('in_sub', 'not_in_sub')
+ORDER BY position
 """
 
