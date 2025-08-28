@@ -115,8 +115,8 @@ edit_response_model = campaign_ns.model('EditCampaignResponse', {
 
 @campaign_ns.route('/<int:campaign_id>/edit')
 class CampaignEditResource(Resource):
-    # @token_required(current_app)
-    # @require_permission("cms")
+    @token_required(current_app)
+    @require_permission("cms")
     @campaign_ns.doc(params={
         'show_counts': 'Optional flag to show step counts'
     })
@@ -300,14 +300,12 @@ campaign_ns.models[campaign_list_model.name] = campaign_list_model
 @campaign_ns.route("/pull")
 class PullInsert(Resource):
     @token_required(current_app)
-    # @require_permission("cms")
+    @require_permission("cms")
     @campaign_ns.expect(pull_request_model)
     @campaign_ns.marshal_with(active_pulls_response_model)
     def post(self):
         args = request.json or {}
-        print(args)
         try:
-            print(g.current_user)
             return insert_pull_list(args, g.current_user), 200
         except ValueError as ve:
             current_app.logger.warning(f"Validation error: {str(ve)}")
@@ -716,7 +714,7 @@ class CampaignDownloadResource(Resource):
         # Reset buffer pointer
         output.seek(0)
 
-        filename = f"campaign_{campaign_id}_export.xlsx"
+        filename = f"{campaign['name']}.xlsx"
 
         return send_file(
             output,

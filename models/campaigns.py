@@ -1,4 +1,5 @@
 import os
+import re
 from decimal import Decimal
 from flask import abort, current_app
 from sqlalchemy import text
@@ -247,50 +248,241 @@ def _build_pull_response(rows):
 
 def insert_pull_list(args, current_user):
     try:
-        campaign_id = args["campaign_id"]
-
+        campaign_list = args.get("campaign_list", {})
+        campaign_id = campaign_list.get("campaign_id")
+        if not campaign_id:
+            raise ValueError("campaign_id is required")
         campaign = db.session.execute(text(GET_CAMPAIGN_DETAILS_BY_ID), {'campaign_id': campaign_id}).fetchone()
         if not campaign:
             return {'error': 'Campaign not found'}, 404
-
         campaign = dict(campaign._mapping)
 
-        now = datetime.now().replace(microsecond=0)
-        day = now.day  # This gives day without leading zero on all platforms
-        list_title = f"{campaign['channel']} {campaign['name']} {now.strftime('%b')} {day}, {now.strftime('%Y %I:%M:%S%p').lower()}"
+        now = datetime.now()
+        fieldset_type = args.get("fieldset_type", "existing")
+        fieldset_id = campaign_list.get("fieldset_id")
+        if fieldset_type == "new":
+            fieldset_name = args.get("fieldset_name")
+            if not fieldset_name:
+                raise ValueError("Must specify fieldset name")
+            # Create fieldset bound to the campaign's datasource
+            fs_row = db.session.execute(
+                text(q.INSERT_NEW_FIELDSET),
+                {
+                    "label": fieldset_name,
+                    "datasource": campaign.get("datasource")
+                }
+            ).fetchone()
+            fieldset_id = fs_row[0]
 
-        latest_pull = db.session.execute(text(GET_LATEST_PULL_SETTINGS), {'campaign_id': campaign_id}).mappings().fetchone()
-        latest_pull = latest_pull or {}
+            # Add fields
+            selected_fields = (args.get("fieldset_selected_fields") or "").strip()
+            if selected_fields:
+                for f in selected_fields.split(","):
+                    f = f.strip()
+                    if f:
+                        db.session.execute(
+                            text(q.INSERT_FIELDSET_FIELD),
+                            {"fieldset_id": fieldset_id, "field": f}
+                        )
+        # # Fallback default
+        fieldset_id = fieldset_id or 1
+        #
+        # --- Build excluded pulls (accept list or CSV string) ---
+        excluded = campaign_list.get("excluded_pulls")
+        if isinstance(excluded, list):
+            excluded_pulls = ",".join([str(x) for x in excluded if str(x).strip()])
+        elif isinstance(excluded, str):
+            excluded_pulls = excluded
+        else:
+            excluded_pulls = ""
+
+        # --- Name generation consistent with PHP ---
+        list_name =(
+            f"{campaign.get('channel', '')} {campaign.get('name', '')} "
+            f"{now.strftime('%b')} {now.day}, {now.strftime('%Y %I:%M:%S%p').lower()}"
+        ).strip()
+
         payload = {
-            "campaign_id": campaign_id,
-            "requested_at": now,
+            "campaign_id": campaign_list.get("campaign_id"),
+            "requested_at": datetime.utcnow().replace(microsecond=0),
             "completed_at": None,
-            "fieldset_id": args.get("fieldset_id") or latest_pull.get("fieldset_id") or 1,
-            "every_n": args.get("every_n") or latest_pull.get("every_n") or 1,
-            "num_records": args.get("num_records") or latest_pull.get("num_records"),
-            "fields": args.get("fields") or latest_pull.get("fields") or "",
-            "requested_by": current_user['name'],
-            "excluded_pulls": args.get("excluded_pulls") or latest_pull.get("excluded_pulls") or "",
-            "householding": args.get("householding") or latest_pull.get("householding") or "",
-            "request_email": args.get("request_email") or latest_pull.get("request_email") or current_user["email"],
-            "criteria_sql": "",
-            "name": list_title
+            "fieldset_id": int(campaign_list["fieldset_id"]) if campaign_list.get("fieldset_id") not in (None, "", "null") else None,
+            "every_n": int(campaign_list["every_n"]) if campaign_list.get("every_n") not in (None, "", "null") else None,
+            "num_records": int(campaign_list["num_records"]) if campaign_list.get("num_records") not in (None, "", "null") else None,
+            "fields": campaign_list.get("fields") or None,
+            "requested_by": campaign_list.get("requested_by") or current_user['name'],
+            "request_email": campaign_list.get("request_email") or current_user['email'],
+            "excluded_pulls": excluded_pulls,
+            "householding": int(campaign_list["householding"]) if campaign_list.get("householding") not in (None, "", "null") else None,
+            "name": list_name,
         }
-        db.session.execute(text(INSERT_PULL_LIST), payload)
+        inserted = db.session.execute(text(q.INSERT_CAMPAIGN_LIST), payload).fetchone()
+        campaign_list_id = inserted[0]
+
         db.session.commit()
 
-        # return just inserted pull as active
-        one_year_ago = datetime.now() - timedelta(days=365)
+        try:
+            subq_rows = db.session.execute(text(q.SUBQUERY_REF_SQL), {"campaign_id": campaign_id}).fetchall()
+            if not subq_rows:
+                print("No subquery-referencing criteria found for campaign", campaign_id)
+            else:
+                subquery_ids = set()
+                for r in subq_rows:
+                    rdict = dict(r._mapping)
+                    raw_val = rdict.get("sql_value")
+                    if raw_val is None:
+                        continue
+                    raw_val_str = str(raw_val).strip()
+                    sid = None
+                    try:
+                        sid = int(raw_val_str)
+                    except Exception:
+                        # try comma-separated
+                        parts = [p.strip() for p in re.split(r'[,;]\s*', raw_val_str) if p.strip()]
+                        for p in parts:
+                            try:
+                                sid = int(p)
+                                break
+                            except Exception:
+                                continue
+                    if sid is not None:
+                        subquery_ids.add(sid)
+                print("Found subquery ids:", subquery_ids)
+
+                # --- updated operator mapping ---
+                op_map = {
+                    "equals": "=",
+                    "not_equal": "<>",
+                    "contains": "LIKE",
+                    "does_not_contain": "NOT LIKE",
+                    "greater": ">",
+                    "less": "<",
+                    "column_equals": "=",
+                    "column_not_equal": "<>",
+                    "column_greater": ">",
+                    "column_less": "<",
+                    "in": "IN",
+                    "not_in": "NOT IN",
+                    "is_empty": "IS NULL",
+                    "not_empty": "IS NOT NULL",
+                }
+
+                for sid in subquery_ids:
+                    try:
+                        print(f"\n--- processing subquery_id={sid} ---")
+
+                        # 1) create cache table (use the exact name you requested)
+                        cache_table = f"cm_subquery_cache_{sid}"
+                        drop_sql = f"DROP TABLE IF EXISTS {cache_table}"
+
+                        # Recreate with only child_field column
+                        create_sql = f"""
+                            CREATE TABLE {cache_table} (
+                                child_field TEXT
+                            )
+                        """
+                        try:
+                            db.session.execute(text(drop_sql))
+                            db.session.execute(text(create_sql))
+                            db.session.commit()
+                            print(f"Ensured cache table exists: {cache_table}")
+                        except Exception as e:
+                            db.session.rollback()
+                            print(f"Failed to create/ensure cache table {cache_table}: {e}")
+                            # continue to next subquery id (can't cache if table creation fails)
+                            continue
+
+                        # 2) resolve campaign_subqueries row to get child_table
+                        subq_row = db.session.execute(text(q.GET_SUBQUERY_CRITERIA),
+                                                          {"sub_id": sid}).fetchall()
+
+                        # 3) resolve datasource/table for this subquery
+                        subq_info = db.session.execute(
+                            text(q.GET_DATASOURCE_CAMPAIGN_ID), {"cid": sid}
+                        ).fetchone()
+                        if not subq_info:
+                            print(f"No subquery info for sid={sid}")
+                            continue
+
+                        info_dict = dict(subq_info._mapping)
+                        table_name = info_dict.get("tablename")  # adjust key if different
+
+                        # 4) build WHERE conditions
+                        conditions = []
+                        for row in subq_row:
+                            row_dict = dict(row._mapping)
+                            col = row_dict.get("column_name")
+                            op = row_dict.get("operator")
+                            val = row_dict.get("value")
+                            is_or = row_dict.get("is_or")
+
+                            sql_op = op_map.get(op)
+
+                            if not sql_op:
+                                print(f"Unsupported operator {op}, skipping")
+                                continue
+
+                            # build condition
+                            if op in ("is_empty", "not_empty"):
+                                cond = f"\"{col}\" {sql_op}"
+                            elif op in ("contains", "does_not_contain"):
+                                cond = f"\"{col}\" {sql_op} '%{val}%'"
+                            elif op in ("column_equals", "column_not_equal", "column_greater", "column_less"):
+                                cond = f"\"{col}\" {sql_op} \"{val}\""
+                            elif op in ("in", "not_in"):
+                                vals = [f"'{v.strip()}'" for v in val.split(",")]
+                                cond = f"\"{col}\" {sql_op} ({', '.join(vals)})"
+                            else:
+                                cond = f"\"{col}\" {sql_op} '{val}'"
+
+
+                            conditions.append((cond, is_or))
+                            print(conditions)
+
+                        # 5) join conditions with AND/OR
+                        if not conditions:
+                            print(f"No conditions for sid={sid}")
+                            continue
+
+                        where_clause = conditions[0][0]
+                        for cond, is_or in conditions[1:]:
+                            connector = "OR" if is_or else "AND"
+                            where_clause = f"({where_clause}) {connector} ({cond})"
+
+                        # --- optimized insert into cache table in bulk ---
+                        insert_sql = f"""
+                                        INSERT INTO {cache_table} (child_field)
+                                        SELECT company_number || policy AS child_field
+                                        FROM {table_name}
+                                        WHERE {where_clause}
+                                        """
+                        db.session.execute(text(insert_sql))
+                        db.session.commit()
+                        print(f"Inserted all rows into {cache_table} for sid={sid} in bulk")
+
+                    except Exception as e:
+                        db.session.rollback()
+                        print(f"Error processing sid={sid}: {e}")
+                        raise e
+
+        except Exception as e:
+            db.session.rollback()
+            raise e
+
+        # --- return active pulls ---
+        one_year_ago = (datetime.now() - timedelta(days=365)).replace(microsecond=0)
         rows = db.session.execute(
-            text(GET_ACTIVE_PULLS_BY_CAMPAIGN), {"since_date": one_year_ago}).mappings().fetchall()
+              text(q.GET_ACTIVE_PULLS_BY_CAMPAIGN), {"since_date": one_year_ago}
+        ).mappings().fetchall()
         return {"active_pulls": _build_pull_response(rows)}
+
     except Exception as e:
         db.session.rollback()
         raise e
 
 def get_global_active_pulls():
     try:
-        one_year_ago = datetime.now() - timedelta(days=365)
+        one_year_ago = (datetime.now() - timedelta(days=365)).replace(microsecond=0)
         rows = db.session.execute(
             text(GET_ACTIVE_PULLS_BY_CAMPAIGN), {"since_date": one_year_ago}).mappings().fetchall()
         return {"active_pulls": _build_pull_response(rows)}
@@ -600,8 +792,8 @@ OPERATORS = [
     {"key": "column_not_equal", "label": "Not Equal Field"},
     {"key": "column_greater", "label": "Greater Than Field"},
     {"key": "column_less", "label": "Less Than Field"},
-    {"key": "in", "label": "IN Comma Separated Field"},
-    {"key": "not_in", "label": "Not In Comma Separated Field"},
+    {"key": "in", "label": "IN Comma Separated List"},
+    {"key": "not_in", "label": "Not In Comma Separated List"},
     {"key": "is_empty", "label": "Is Empty"},
     {"key": "not_empty", "label": "Not Empty"},
 ]
@@ -925,7 +1117,6 @@ def get_criteria_for_campaign(campaign_id, show_counts=False, datasource=None):
                 "count": count
             })
             continue
-        print(f"[DEBUG] Checking counts for {row['id']} | table={campaign_table} | column={column_name} | value={sql_value}")
 
 
         # ✅ Normal criteria row
