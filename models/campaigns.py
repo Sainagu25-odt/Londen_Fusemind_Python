@@ -162,6 +162,7 @@ def get_previous_pulls(campaign_id):
     for r in pre_pulls:
         pull_values = format_pull_values(r)
         previous_pulls.append({
+            "id" : r["id"],
             "name": r['name'],
             "requested_at": r['requested_at'].strftime("%m/%d/%Y %I:%M %p") if r['requested_at'] else None,
             "requested_by": r['requested_by'],
@@ -201,11 +202,12 @@ def build_campaign_request_response(campaign_id, user):
 
     act_pulls = db.session.execute(
         text(GET_ACTIVE_PULLS_BY_CAMPAIGN), {"since_date": one_year_ago}).mappings().fetchall()
-
+    print(act_pulls)
     active_pulls = []
     for r in act_pulls:
         pull_values = format_pull_values(r)
         active_pulls.append({
+            "id" : r['list_id'],
             "name": r['name'],
             "requested_at": r['requested_at'].strftime("%m/%d/%Y %I:%M %p") if r['requested_at'] else None,
             "requested_by": r['requested_by'],
@@ -449,10 +451,17 @@ def insert_pull_list(args, current_user):
                             connector = "OR" if is_or else "AND"
                             where_clause = f"({where_clause}) {connector} ({cond})"
 
+                            # 6. choose the child_field column based on table
+                        if table_name in ("noninsurance_policies", "telemarketing_results", "donotcall_phones"):
+                            key_col = "phone_number"
+                        elif table_name == "donotcall_policies":
+                            key_col = "policy"
+                        else:
+                            raise Exception(f"Unsupported table {table_name} for sid={sid}")
                         # --- optimized insert into cache table in bulk ---
                         insert_sql = f"""
                                         INSERT INTO {cache_table} (child_field)
-                                        SELECT company_number || policy AS child_field
+                                        SELECT {key_col} AS child_field
                                         FROM {table_name}
                                         WHERE {where_clause}
                                         """
