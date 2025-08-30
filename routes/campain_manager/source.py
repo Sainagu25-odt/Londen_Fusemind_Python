@@ -2,6 +2,7 @@ import logging
 import os
 import re
 import tempfile
+import zipfile
 
 from flask_restx import Namespace, Resource, fields, reqparse
 
@@ -21,7 +22,7 @@ from routes.campain_manager.dropdown_service import get_criteria_options
 from routes.campain_manager.schema import campaign_edit_response, criteria_model, \
     pull_item_model, active_pulls_response_model, pull_request_parser, \
     campaign_response, counts_response, add_criteria_response, pull_request_model, campaign_list_model
-from sql.campaigns_sql import GET_CAMPAIGN_LIST_FILENAME
+from sql.campaigns_sql import GET_CAMPAIGN_LIST_FILENAME, SUBQUERY_REF_SQL, GET_DATASOURCE_CAMPAIGN_ID
 from utils.auth import require_permission
 from utils.token import token_required
 
@@ -400,36 +401,96 @@ class DownloadPullFile(Resource):
     @require_permission("cms")
     def get(self, id):
         try:
-            # Fetch filename from DB
-            row = db.session.execute(text(GET_CAMPAIGN_LIST_FILENAME), {"id": id}).mappings().first()
-            if not row:
-                return {"message": "Campaign list not found"}, 404
+            list_row = db.session.execute(
+                text(GET_CAMPAIGN_LIST_FILENAME),{"cid": id}).fetchone()
+            if not list_row:
+                return {"error": "Campaign list not found"}, 404
 
-            original_filename = row["file_name"]
-            current_app.logger.info(f"Original filename from DB: {original_filename}")
+            list_dict = dict(list_row._mapping)
 
-            # Sanitize filename
-            sanitized_filename = re.sub(r"[ ,:]", "", original_filename)
-            current_app.logger.info(f"Sanitized filename: {sanitized_filename}")
+            # --- 2. Generate filename ---
+            filename_base = list_dict['name']
+            filename_base = re.sub(r"[^0-9A-Za-z-]", "", filename_base)  # sanitize for filesystem
+            zip_filename = f"{filename_base}.zip"
 
-            # Ensure 'lists' folder exists, create if missing
-            lists_folder = os.path.join(current_app.root_path, "lists")
-            if not os.path.exists(lists_folder):
-                os.makedirs(lists_folder)
-                current_app.logger.info(f"Created missing folder: {lists_folder}")
+            subq_rows = db.session.execute(text(SUBQUERY_REF_SQL), {"campaign_id": id}).fetchall()
 
-            # Full path for the zip file
-            file_path = os.path.join(lists_folder, f"{sanitized_filename}.zip")
-            current_app.logger.info(f"Full file path: {file_path}")
+            subquery_ids = set()
+            for r in subq_rows:
+                rdict = dict(r._mapping)
+                raw_val = rdict.get("sql_value")
+                if raw_val is None:
+                    continue
+                raw_val_str = str(raw_val).strip()
+                sid = None
+                try:
+                    sid = int(raw_val_str)
+                except Exception:
+                    parts = [p.strip() for p in re.split(r'[,;]\s*', raw_val_str) if p.strip()]
+                    for p in parts:
+                        try:
+                            sid = int(p)
+                            break
+                        except Exception:
+                            continue
+                if sid is not None:
+                    subquery_ids.add(sid)
 
-            # If file does not exist, create an empty placeholder zip file
-            if not os.path.exists(file_path):
-                with open(file_path, "wb") as f:
-                    pass  # creates an empty file
-                current_app.logger.info(f"Created placeholder file: {file_path}")
+            if not subquery_ids:
+                return {"error": "No valid subquery IDs found"}, 404
 
-            # Now send the file
-            return send_file(file_path, as_attachment=True)
+            # 3. Create temporary directory for Excel files
+            with tempfile.TemporaryDirectory() as tmpdir:
+                excel_files = []
+
+                for sid in subquery_ids:
+                    cache_table = f"cm_subquery_cache_{sid}"
+                    table_exists = db.session.execute(
+                        text("SELECT to_regclass(:tbl)"), {"tbl": cache_table}
+                    ).scalar()
+                    if not table_exists:
+                        continue
+
+                    # Get main table for this subquery
+                    main_table_row = db.session.execute(text(GET_DATASOURCE_CAMPAIGN_ID), {"cid": sid}).fetchone()
+                    if not main_table_row:
+                        continue
+                    table_name = main_table_row._mapping.get("tablename")
+
+                    # Determine key column
+                    if table_name in ("noninsurance_policies", "telemarketing_results", "donotcall_phones"):
+                        key_col = "phone_number"
+                    elif table_name == "donotcall_policies":
+                        key_col = "policy"
+                    else:
+                        continue
+
+                    # Fetch matching rows
+                    query = f"""
+                                   SELECT t.* FROM {table_name} t
+                                   WHERE t.{key_col}::text IN (SELECT child_field FROM {cache_table})
+                               """
+                    with db.engine.connect() as conn:
+                        df = pd.read_sql(query, conn)
+
+                    if not df.empty:
+                        excel_path = os.path.join(tmpdir, f"{table_name}_{sid}.xlsx")
+                        df.to_excel(excel_path, index=False, engine="openpyxl")
+                        excel_files.append(excel_path)
+
+                # 4. Create ZIP in a **permanent temp location** outside TemporaryDirectory
+                zip_path = os.path.join(tempfile.gettempdir(), zip_filename)
+                with zipfile.ZipFile(zip_path, 'w', zipfile.ZIP_DEFLATED) as zf:
+                    for file in excel_files:
+                        zf.write(file, os.path.basename(file))
+
+            # 5. Send ZIP file
+            return send_file(
+                zip_path,
+                as_attachment=True,
+                download_name=zip_filename,
+                mimetype='application/zip'
+            )
 
         except Exception as e:
             current_app.logger.error(f"DownloadPullFile failed: {e}")
