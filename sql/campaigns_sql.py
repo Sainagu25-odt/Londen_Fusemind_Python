@@ -338,10 +338,8 @@ ORDER BY 1
 
 
 GET_CAMPAIGN_LIST_FILENAME = """
-SELECT id, name FROM campaign_lists 
-WHERE campaign_id = :cid 
-ORDER BY requested_at DESC 
-LIMIT 1
+SELECT campaign_id, name FROM campaign_lists 
+WHERE id = :cid
 """
 
 get_campaign_records_sql = '''
