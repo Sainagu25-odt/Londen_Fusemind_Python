@@ -3,6 +3,7 @@ import os
 import re
 import tempfile
 import zipfile
+from datetime import datetime
 
 from flask_restx import Namespace, Resource, fields, reqparse
 
@@ -413,8 +414,7 @@ class DownloadPullFile(Resource):
             filename_base = re.sub(r"[^0-9A-Za-z-]", "", filename_base)  # sanitize for filesystem
             zip_filename = f"{filename_base}.zip"
 
-            subq_rows = db.session.execute(text(SUBQUERY_REF_SQL), {"campaign_id": id}).fetchall()
-
+            subq_rows = db.session.execute(text(SUBQUERY_REF_SQL), {"campaign_id": list_dict['campaign_id']}).fetchall()
             subquery_ids = set()
             for r in subq_rows:
                 rdict = dict(r._mapping)
@@ -483,6 +483,14 @@ class DownloadPullFile(Resource):
                 with zipfile.ZipFile(zip_path, 'w', zipfile.ZIP_DEFLATED) as zf:
                     for file in excel_files:
                         zf.write(file, os.path.basename(file))
+
+            # --- Update completed_at in campaign_lists ---
+            now = datetime.utcnow().replace(microsecond=0)
+            db.session.execute(
+                text("UPDATE campaign_lists SET completed_at = :completed WHERE id = :cid"),
+                {"completed": now, "cid": id}
+                )
+            db.session.commit()
 
             # 5. Send ZIP file
             return send_file(
@@ -747,6 +755,7 @@ class CampaignDownloadResource(Resource):
                 'valign': 'vcenter'
             })
             data_format = workbook.add_format({'border': 1})
+            total_format = workbook.add_format({'bold': True, 'border': 1})
 
             # Merge campaign name
             num_cols = len(df_criteria.columns)
@@ -754,8 +763,17 @@ class CampaignDownloadResource(Resource):
                                   f"Campaign_name : {campaign['name']}", campaign_format)
 
             # Header formatting
+            startrow = 2
             for col_num, col_name in enumerate(df_criteria.columns.tolist()):
                 worksheet.write(startrow, col_num, col_name, header_format)
+
+                # --- Write Total Counts manually ---
+            total_english = df_criteria['ENGLISH'].sum()
+            total_spanish = df_criteria['SPANISH'].sum() if 'SPANISH' in df_criteria else 0
+            worksheet.write(startrow + 1, 0, "Total counts", total_format)
+            worksheet.write(startrow + 1, 1, "", total_format)
+            worksheet.write(startrow + 1, 2, total_english, total_format)
+            worksheet.write(startrow + 1, 3, total_spanish, total_format)
 
             # Data formatting
             nrows, ncols = df_criteria.shape
@@ -763,9 +781,9 @@ class CampaignDownloadResource(Resource):
                 for c in range(ncols):
                     val = df_criteria.iat[r, c]
                     if pd.isna(val):
-                        worksheet.write_blank(startrow + 1 + r, c, None, data_format)
+                        worksheet.write_blank(startrow + 2 + r, c, None, data_format)
                     else:
-                        worksheet.write(startrow + 1 + r, c, val, data_format)
+                        worksheet.write(startrow + 2 + r, c, val, data_format)
 
             # Auto column widths
             for i, col in enumerate(df_criteria.columns):

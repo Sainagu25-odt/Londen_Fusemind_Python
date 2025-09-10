@@ -202,7 +202,6 @@ def build_campaign_request_response(campaign_id, user):
 
     act_pulls = db.session.execute(
         text(GET_ACTIVE_PULLS_BY_CAMPAIGN), {"since_date": one_year_ago}).mappings().fetchall()
-    print(act_pulls)
     active_pulls = []
     for r in act_pulls:
         pull_values = format_pull_values(r)
@@ -439,7 +438,6 @@ def insert_pull_list(args, current_user):
 
 
                             conditions.append((cond, is_or))
-                            print(conditions)
 
                         # 5) join conditions with AND/OR
                         if not conditions:
